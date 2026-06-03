@@ -1,15 +1,21 @@
 // helio-app/frontend/src/pages/Dashboard.tsx
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useMetrics } from '../hooks/useMetrics.ts';
 import { useSettings } from '../hooks/useSettings.ts';
 import { StatCard } from '../components/StatCard.tsx';
 import { CpuSparkline } from '../components/CpuSparkline.tsx';
 import { RamBars } from '../components/RamBars.tsx';
 import { ServerTable } from '../components/ServerTable.tsx';
+import type { Node } from '../types.ts';
 
 export function Dashboard() {
   const { current, history } = useMetrics();
   const { settings } = useSettings();
+  const [nodes, setNodes] = useState<Node[]>([]);
+
+  useEffect(() => {
+    fetch('/api/nodes').then(r => r.json()).then(setNodes).catch(console.error);
+  }, []);
 
   const showCpu   = settings.dashboard_show_cpu   !== 'false';
   const showRam   = settings.dashboard_show_ram   !== 'false';
@@ -43,7 +49,7 @@ export function Dashboard() {
         </div>
       )}
 
-      {showNodes && <ServerTable nodes={[]} />}
+      {showNodes && <ServerTable nodes={nodes} />}
     </>
   );
 }

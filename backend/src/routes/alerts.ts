@@ -9,6 +9,10 @@ alertsRouter.get('/', (_req, res) => {
   res.json(queries.getAllAlerts());
 });
 
+alertsRouter.get('/events', (_req, res) => {
+  res.json(queries.getRecentAlertEvents(50));
+});
+
 alertsRouter.post('/', (req, res) => {
   const { name, metric, operator, threshold, channel, target, cooldown } = req.body as {
     name: string; metric: AlertMetric; operator: AlertOperator;

@@ -1,4 +1,9 @@
 /* helio-app/frontend/src/styles/dashboard.css */
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(20px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.toast-item { animation: slideIn 0.2s ease; }
 *, *::before, *::after { box-sizing: border-box; }
 * { margin: 0; padding: 0; }
 html, body, #root { height: 100%; }

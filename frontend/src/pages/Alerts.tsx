@@ -1,7 +1,12 @@
 // helio-app/frontend/src/pages/Alerts.tsx
 import React, { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
-import type { Alert, AlertMetric, AlertOperator, AlertChannel } from '../types.ts';
+import type { Alert, AlertEvent, AlertMetric, AlertOperator, AlertChannel } from '../types.ts';
+
+interface AlertEventWithName extends AlertEvent {
+  alert_name: string;
+  alert_metric: string;
+}
 
 interface NewRule {
   name: string; metric: AlertMetric; operator: AlertOperator;
@@ -15,13 +20,17 @@ const BLANK: NewRule = {
 
 export function Alerts() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [events, setEvents] = useState<AlertEventWithName[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<NewRule>(BLANK);
 
   const fetchAlerts = () =>
     fetch('/api/alerts').then(r => r.json()).then(setAlerts).catch(console.error);
 
-  useEffect(() => { fetchAlerts(); }, []);
+  const fetchEvents = () =>
+    fetch('/api/alerts/events').then(r => r.json()).then(setEvents).catch(console.error);
+
+  useEffect(() => { fetchAlerts(); fetchEvents(); }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,6 +42,7 @@ export function Alerts() {
     setForm(BLANK);
     setShowForm(false);
     fetchAlerts();
+    fetchEvents();
   };
 
   const handleDelete = async (id: number) => {
@@ -145,6 +155,65 @@ export function Alerts() {
             </button>
           </div>
         ))}
+      </div>
+
+      <div style={{ marginTop: '40px' }}>
+        <h2 style={{ fontSize: '1rem', fontWeight: 540, marginBottom: '16px', color: 'var(--text-dim)' }}>
+          Letzte Ereignisse
+        </h2>
+        {events.length === 0 ? (
+          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--text-dim)',
+            fontFamily: 'var(--font-mono)', fontSize: '0.85rem', border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-lg)' }}>
+            Noch keine Ereignisse
+          </div>
+        ) : (
+          <div style={{
+            border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+            overflow: 'hidden',
+          }}>
+            {events.map((ev, i) => {
+              const ts = new Date(ev.triggered_at * 1000);
+              const dateStr = ts.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+              const timeStr = ts.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+              return (
+                <div key={ev.id} style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr auto auto',
+                  alignItems: 'center',
+                  gap: '16px',
+                  padding: '11px 16px',
+                  borderBottom: i < events.length - 1 ? '1px solid var(--border)' : 'none',
+                  fontSize: '0.83rem',
+                }}>
+                  <div>
+                    <span style={{ fontWeight: 500 }}>{ev.alert_name}</span>
+                    <span style={{
+                      marginLeft: '10px', fontFamily: 'var(--font-mono)',
+                      fontSize: '0.75rem', color: 'var(--text-dim)',
+                    }}>
+                      {ev.alert_metric} = {ev.peak_value.toFixed(1)}
+                    </span>
+                  </div>
+                  <span style={{
+                    fontFamily: 'var(--font-mono)', fontSize: '0.75rem',
+                    color: 'var(--text-dim)',
+                  }}>
+                    {dateStr} {timeStr}
+                  </span>
+                  <span style={{
+                    fontSize: '0.72rem', fontFamily: 'var(--font-mono)',
+                    padding: '2px 8px', borderRadius: '4px',
+                    background: ev.resolved_at ? 'color-mix(in srgb, var(--ok) 15%, transparent)' : 'color-mix(in srgb, var(--warn) 15%, transparent)',
+                    color: ev.resolved_at ? 'var(--ok)' : 'var(--warn)',
+                  }}>
+                    {ev.resolved_at ? 'gelöst' : 'aktiv'}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </>
   );
