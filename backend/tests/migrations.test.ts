@@ -69,16 +69,18 @@ describe('runMigrations (real migration files)', () => {
     expect(tables).toContain('alerts');
     expect(tables).toContain('alert_events');
     expect(tables).toContain('settings');
+    expect(tables).toContain('users');
     expect(tables).toContain('migrations_log');
   });
 
-  it('populates migrations_log with both migration files', () => {
+  it('populates migrations_log with all migration files', () => {
     runMigrations(db);
     const log = migrationLog(db);
     const names = log.map((r) => r.name);
     expect(names).toContain('001_initial.sql');
     expect(names).toContain('002_extend_nodes.sql');
-    expect(log).toHaveLength(2);
+    expect(names).toContain('003_add_users.sql');
+    expect(log).toHaveLength(3);
     // applied_at should be a reasonable unix timestamp
     expect(log[0].applied_at).toBeGreaterThan(1_700_000_000);
   });
@@ -108,10 +110,10 @@ describe('runMigrations (real migration files)', () => {
     expect(() => runMigrations(db)).not.toThrow();
   });
 
-  it('is idempotent: migrations_log still has exactly 2 entries after second run', () => {
+  it('is idempotent: migrations_log still has exactly 3 entries after second run', () => {
     runMigrations(db);
     runMigrations(db);
-    expect(migrationLog(db)).toHaveLength(2);
+    expect(migrationLog(db)).toHaveLength(3);
   });
 });
 

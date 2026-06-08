@@ -61,29 +61,40 @@ export function runMigrations(db: Database.Database): void {
     const filePath = path.join(MIGRATIONS_DIR, file);
     const sql = fs.readFileSync(filePath, 'utf8');
 
-    // Split on semicolons to handle migrations that contain multiple
-    // statements (e.g. 002_extend_nodes needs each ALTER TABLE run
-    // separately so we can detect duplicate-column errors per statement).
-    const statements = sql
-      .split(';')
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0 && !s.startsWith('--'));
+    // Migrations containing ALTER TABLE need statement-by-statement execution
+    // so we can tolerate "duplicate column name" per-statement (SQLite has no
+    // ALTER TABLE ADD COLUMN IF NOT EXISTS). All other migrations (including
+    // those with triggers) use db.exec() on the whole file so SQLite's native
+    // parser handles semicolons inside trigger bodies correctly.
+    const hasAlterTable = /alter\s+table/i.test(sql);
 
     const applyMigration = db.transaction(() => {
-      for (const stmt of statements) {
-        try {
-          db.exec(stmt + ';');
-        } catch (err: unknown) {
-          // SQLite does not support ALTER TABLE ADD COLUMN IF NOT EXISTS.
-          // Tolerate "duplicate column name" errors so that migration 002
-          // is safe to run against a database that was bootstrapped with
-          // migration 001 (which already includes the extended columns).
-          const message = err instanceof Error ? err.message : String(err);
-          if (message.includes('duplicate column name')) {
-            continue; // column already exists - this is fine
+      if (hasAlterTable) {
+        // Strip line comments, then split and run per statement
+        const cleanSql = sql.replace(/--[^\n]*/g, '');
+        const statements = cleanSql
+          .split(';')
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+
+        for (const stmt of statements) {
+          try {
+            db.exec(stmt + ';');
+          } catch (err: unknown) {
+            // SQLite does not support ALTER TABLE ADD COLUMN IF NOT EXISTS.
+            // Tolerate duplicate-column errors so migration 002 is safe to
+            // run against a database that already has the extended columns.
+            const message = err instanceof Error ? err.message : String(err);
+            if (message.includes('duplicate column name')) {
+              continue;
+            }
+            throw err;
           }
-          throw err; // re-throw all other errors
         }
+      } else {
+        // Use exec on the whole file: SQLite's native parser handles
+        // trigger bodies and multi-statement SQL correctly.
+        db.exec(sql);
       }
 
       db.prepare(
