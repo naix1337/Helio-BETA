@@ -1,11 +1,12 @@
 // helio-app/frontend/src/components/Sidebar.tsx
 import React from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, Server, Box, Bell, Activity,
-  Settings, Users,
+  Settings, Users, LogOut,
 } from 'lucide-react';
 import { useMetricsStore } from '../store/metricsStore.ts';
+import { useAuth } from '../hooks/useAuth.ts';
 
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: 'Übersicht', to: '/dashboard' },
@@ -32,6 +33,10 @@ function WsIndicator() {
 }
 
 export function Sidebar() {
+  const currentUser = useAuth((s) => s.currentUser);
+  const logout = useAuth((s) => s.logout);
+  const navigate = useNavigate();
+
   const activeStyle: React.CSSProperties = {
     background: 'var(--primary-soft)',
     color: 'var(--primary)',
@@ -44,6 +49,22 @@ export function Sidebar() {
     fontSize: '0.85rem', color: 'var(--text-muted)',
     transition: 'background 0.15s, color 0.15s',
     cursor: 'pointer',
+  };
+
+  function handleLogout() {
+    logout();
+    navigate('/login');
+  }
+
+  const roleBadgeStyle: React.CSSProperties = {
+    fontSize: '0.65rem',
+    padding: '1px 5px',
+    borderRadius: '4px',
+    background: 'var(--primary-soft)',
+    color: 'var(--primary)',
+    fontFamily: 'var(--font-mono)',
+    letterSpacing: '0.03em',
+    flexShrink: 0,
   };
 
   return (
@@ -97,6 +118,66 @@ export function Sidebar() {
           {label}
         </NavLink>
       ))}
+
+      {currentUser && (
+        <div style={{
+          marginTop: 'auto',
+          paddingTop: '12px',
+          borderTop: '1px solid var(--border)',
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '8px',
+            padding: '8px 11px',
+          }}>
+            {/* User initial circle */}
+            <span style={{
+              width: '26px', height: '26px', borderRadius: '50%', flexShrink: 0,
+              background: 'var(--primary-soft)',
+              color: 'var(--primary)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.75rem', fontWeight: 600,
+            }}>
+              {currentUser.email.charAt(0).toUpperCase()}
+            </span>
+
+            {/* Email + role */}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{
+                fontSize: '0.78rem', color: 'var(--text)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {currentUser.email}
+              </div>
+              <div style={{ marginTop: '2px' }}>
+                <span style={roleBadgeStyle}>{currentUser.role}</span>
+              </div>
+            </div>
+
+            {/* Logout button */}
+            <button
+              onClick={handleLogout}
+              title="Abmelden"
+              style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: 'var(--text-dim)', padding: '4px', borderRadius: '6px',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                transition: 'color 0.15s, background 0.15s',
+                flexShrink: 0,
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--danger, #ef4444)';
+                (e.currentTarget as HTMLButtonElement).style.background = 'rgba(239,68,68,0.08)';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--text-dim)';
+                (e.currentTarget as HTMLButtonElement).style.background = 'none';
+              }}
+            >
+              <LogOut size={15} />
+            </button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

@@ -10,6 +10,11 @@ import { Alerts } from './pages/Alerts.tsx';
 import { StatusPage } from './pages/StatusPage.tsx';
 import { Settings } from './pages/Settings.tsx';
 import { LandingPage } from './pages/LandingPage.tsx';
+import { LoginPage } from './pages/LoginPage.tsx';
+import { SetupPage } from './pages/SetupPage.tsx';
+import { Team } from './pages/Team.tsx';
+import { RequireAuth } from './components/RequireAuth.tsx';
+import { RequireSetup } from './components/RequireSetup.tsx';
 
 function AppLayout() {
   return (
@@ -28,14 +33,21 @@ export default function App() {
       <ToastContainer />
       <Routes>
         <Route path="/" element={<LandingPage />} />
-        <Route path="/dashboard" element={<AppLayout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="nodes" element={<Nodes />} />
-          <Route path="containers" element={<Containers />} />
-          <Route path="alerts" element={<Alerts />} />
-          <Route path="settings" element={<Settings />} />
-        </Route>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/setup" element={<SetupPage />} />
         <Route path="/status" element={<StatusPage />} />
+        <Route element={<RequireSetup />}>
+          <Route element={<RequireAuth />}>
+            <Route path="/dashboard" element={<AppLayout />}>
+              <Route index element={<Dashboard />} />
+              <Route path="nodes" element={<Nodes />} />
+              <Route path="containers" element={<Containers />} />
+              <Route path="alerts" element={<Alerts />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="team" element={<Team />} />
+            </Route>
+          </Route>
+        </Route>
       </Routes>
     </BrowserRouter>
   );
