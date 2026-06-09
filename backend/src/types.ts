@@ -39,19 +39,6 @@ export interface MetricRow {
   net_json: string;   // JSON: NetInfo[]
 }
 
-export interface ContainerInfo {
-  id: string;
-  name: string;
-  image: string;
-  status: 'running' | 'stopped' | 'restarting' | 'dead' | 'unknown';
-  cpu_percent: number;
-  mem_used: number;
-  mem_limit: number;
-  mem_percent: number;
-  created: number;
-  ports: string[];
-}
-
 export interface Node {
   id: string;
   name: string;

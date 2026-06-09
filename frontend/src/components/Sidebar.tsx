@@ -2,7 +2,7 @@
 import React from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, Server, Box, Bell, Activity,
+  LayoutDashboard, Server, Bell, Activity,
   Settings, Users, LogOut, Cpu, Radar,
 } from 'lucide-react';
 import { useMetricsStore } from '../store/metricsStore.ts';
@@ -13,7 +13,6 @@ import { useAuth } from '../hooks/useAuth.ts';
 const NAV_ITEMS = [
   { icon: LayoutDashboard, label: 'Übersicht', to: '/dashboard' },
   { icon: Server,          label: 'Nodes',     to: '/dashboard/nodes' },
-  { icon: Box,             label: 'Container', to: '/dashboard/containers' },
   { icon: Bell,            label: 'Alerts',    to: '/dashboard/alerts' },
   { icon: Activity,        label: 'Status-Page', to: '/status' },
   { icon: Cpu,             label: 'Agents',    to: '/dashboard/agents' },

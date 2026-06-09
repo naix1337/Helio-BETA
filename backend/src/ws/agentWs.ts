@@ -152,7 +152,7 @@ export function attachAgentWebSocket(server: Server): void {
         mem_total: typeof mem?.total === 'number' ? mem.total : null,
         disk_json: snap.disk ? JSON.stringify(snap.disk) : null,
         net_json: snap.network ? JSON.stringify(snap.network) : null,
-        docker_json: snap.docker ? JSON.stringify(snap.docker) : null,
+        docker_json: null,
       });
     }
 

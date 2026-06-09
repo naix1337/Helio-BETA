@@ -2,7 +2,6 @@
 import { Router } from 'express';
 import { queries } from '../db/index.js';
 import { collectSnapshot } from '../collectors/systemCollector.js';
-import { collectContainers } from '../collectors/dockerCollector.js';
 
 export const metricsRouter = Router();
 
@@ -33,7 +32,3 @@ metricsRouter.get('/history', (req, res) => {
   res.json(sampled);
 });
 
-metricsRouter.get('/containers', async (_req, res) => {
-  const containers = await collectContainers();
-  res.json(containers);
-});

@@ -120,26 +120,6 @@ agentsRouter.get('/:id/metrics/history', (req, res) => {
   res.json(result);
 });
 
-// ── GET /:id/containers ───────────────────────────────────────────────────────
-
-agentsRouter.get('/:id/containers', (req, res) => {
-  const agent = queries.getAgent(req.params.id) as AgentRow | undefined;
-  if (!agent) {
-    res.status(404).json({ error: 'Agent not found' });
-    return;
-  }
-  const m = queries.getAgentMetricsLatest(req.params.id);
-  if (!m || !m.docker_json) {
-    res.json([]);
-    return;
-  }
-  try {
-    res.json(JSON.parse(m.docker_json));
-  } catch {
-    res.json([]);
-  }
-});
-
 // ── PUT /:id — update name and/or tags ────────────────────────────────────────
 
 agentsRouter.put('/:id', (req, res) => {

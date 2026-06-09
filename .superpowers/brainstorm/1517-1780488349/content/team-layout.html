@@ -1,0 +1,117 @@
+<h2>Team-Seite: Wie werden Nutzer angezeigt?</h2>
+<p class="subtitle">Beide Varianten zeigen dieselben Infos — Unterschied liegt in Dichte und Nutzungsart.</p>
+
+<style>
+  .preview-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 8px; }
+  .preview-card { border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; overflow: hidden; background: #0d1117; padding: 20px; }
+  .preview-label { margin-top: 14px; font-size: 0.75rem; color: #8b949e; text-align: center; }
+  * { box-sizing: border-box; }
+
+  /* Table style */
+  .tm-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+  .tm-table th { text-align: left; color: #8b949e; font-weight: 500; padding: 6px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 0.7rem; text-transform: uppercase; letter-spacing: .04em; }
+  .tm-table td { padding: 9px 10px; border-bottom: 1px solid rgba(255,255,255,0.05); color: #e6edf3; }
+  .tm-table tr:last-child td { border-bottom: none; }
+  .tm-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.68rem; font-family: monospace; }
+  .tm-badge.admin { background: rgba(34,211,238,.15); color: #22d3ee; }
+  .tm-badge.editor { background: rgba(167,139,250,.15); color: #a78bfa; }
+  .tm-badge.viewer { background: rgba(255,255,255,.08); color: #8b949e; }
+  .tm-avatar { width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.65rem; font-weight: 600; margin-right: 7px; vertical-align: middle; }
+  .av-a { background: #22d3ee22; color: #22d3ee; }
+  .av-b { background: #a78bfa22; color: #a78bfa; }
+  .av-c { background: #34d39922; color: #34d399; }
+  .av-d { background: #f59e0b22; color: #f59e0b; }
+  .tm-name { vertical-align: middle; }
+  .tm-add-btn { display: flex; align-items: center; gap: 6px; margin-bottom: 14px; padding: 6px 12px; background: #22d3ee; color: #000; border: none; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; width: fit-content; }
+
+  /* Card style */
+  .tm-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .tm-card { background: #161b22; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .tm-card-top { display: flex; align-items: center; gap: 10px; }
+  .tm-card-avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; flex-shrink: 0; }
+  .tm-card-name { font-size: 0.82rem; font-weight: 500; color: #e6edf3; }
+  .tm-card-email { font-size: 0.72rem; color: #8b949e; margin-top: 1px; }
+  .tm-card-footer { display: flex; justify-content: space-between; align-items: center; }
+  .tm-dot-online { width: 7px; height: 7px; border-radius: 50%; background: #22d3ee; display: inline-block; margin-right: 5px; }
+  .tm-dot-offline { width: 7px; height: 7px; border-radius: 50%; background: #374151; display: inline-block; margin-right: 5px; }
+  .tm-status-text { font-size: 0.7rem; color: #8b949e; }
+  .tm-section-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .tm-section-title { font-size: 0.85rem; font-weight: 600; color: #e6edf3; }
+</style>
+
+<div class="preview-wrap">
+
+  <div class="option" data-choice="table" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Tabelle</h3>
+      <p>Kompakt, skaliert gut auf viele Nutzer. Rolle und Status auf einen Blick.</p>
+      <div style="margin-top: 14px;">
+        <div class="preview-card">
+          <div class="tm-section-header">
+            <span class="tm-section-title">Team-Mitglieder <span style="color:#8b949e;font-weight:400">(4)</span></span>
+            <button class="tm-add-btn">+ Nutzer hinzufügen</button>
+          </div>
+          <table class="tm-table">
+            <thead><tr><th>Name</th><th>Rolle</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td><span class="tm-avatar av-a">FL</span><span class="tm-name">Florian L.</span></td><td><span class="tm-badge admin">Admin</span></td><td style="color:#22d3ee;font-size:0.72rem">● aktiv</td></tr>
+              <tr><td><span class="tm-avatar av-b">MK</span><span class="tm-name">Max K.</span></td><td><span class="tm-badge editor">Editor</span></td><td style="color:#22d3ee;font-size:0.72rem">● aktiv</td></tr>
+              <tr><td><span class="tm-avatar av-c">SP</span><span class="tm-name">Sara P.</span></td><td><span class="tm-badge viewer">Viewer</span></td><td style="color:#8b949e;font-size:0.72rem">○ inaktiv</td></tr>
+              <tr><td><span class="tm-avatar av-d">TW</span><span class="tm-name">Tom W.</span></td><td><span class="tm-badge editor">Editor</span></td><td style="color:#22d3ee;font-size:0.72rem">● aktiv</td></tr>
+            </tbody>
+          </table>
+          <div class="preview-label">Zeilen-Layout · sortierbar · passt zum Rest der App</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="cards" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>Karten</h3>
+      <p>Persönlicher, mehr visueller Fokus pro Nutzer. Besser für kleine Teams (&lt;10).</p>
+      <div style="margin-top: 14px;">
+        <div class="preview-card">
+          <div class="tm-section-header">
+            <span class="tm-section-title">Team-Mitglieder <span style="color:#8b949e;font-weight:400">(4)</span></span>
+            <button class="tm-add-btn">+ Hinzufügen</button>
+          </div>
+          <div class="tm-cards">
+            <div class="tm-card">
+              <div class="tm-card-top">
+                <div class="tm-card-avatar av-a" style="background:#22d3ee22;color:#22d3ee">FL</div>
+                <div><div class="tm-card-name">Florian L.</div><div class="tm-card-email">admin@helio.de</div></div>
+              </div>
+              <div class="tm-card-footer"><span class="tm-badge admin">Admin</span><span class="tm-status-text"><span class="tm-dot-online"></span>aktiv</span></div>
+            </div>
+            <div class="tm-card">
+              <div class="tm-card-top">
+                <div class="tm-card-avatar av-b" style="background:#a78bfa22;color:#a78bfa">MK</div>
+                <div><div class="tm-card-name">Max K.</div><div class="tm-card-email">max@helio.de</div></div>
+              </div>
+              <div class="tm-card-footer"><span class="tm-badge editor">Editor</span><span class="tm-status-text"><span class="tm-dot-online"></span>aktiv</span></div>
+            </div>
+            <div class="tm-card">
+              <div class="tm-card-top">
+                <div class="tm-card-avatar av-c" style="background:#34d39922;color:#34d399">SP</div>
+                <div><div class="tm-card-name">Sara P.</div><div class="tm-card-email">sara@helio.de</div></div>
+              </div>
+              <div class="tm-card-footer"><span class="tm-badge viewer">Viewer</span><span class="tm-status-text"><span class="tm-dot-offline"></span>inaktiv</span></div>
+            </div>
+            <div class="tm-card">
+              <div class="tm-card-top">
+                <div class="tm-card-avatar av-d" style="background:#f59e0b22;color:#f59e0b">TW</div>
+                <div><div class="tm-card-name">Tom W.</div><div class="tm-card-email">tom@helio.de</div></div>
+              </div>
+              <div class="tm-card-footer"><span class="tm-badge editor">Editor</span><span class="tm-status-text"><span class="tm-dot-online"></span>aktiv</span></div>
+            </div>
+          </div>
+          <div class="preview-label">Karten-Grid · mehr Platz · wirkt persönlicher</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

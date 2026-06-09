@@ -15,7 +15,6 @@ import { pingRouter, setPingCollector } from './routes/ping.js';
 import { agentsRouter } from './routes/agents.js';
 import { teamRouter } from './routes/team.js';
 import { collectSnapshot } from './collectors/systemCollector.js';
-import { collectContainers } from './collectors/dockerCollector.js';
 import { PingCollector } from './collectors/pingCollector.js';
 import { queries } from './db/index.js';
 import { evaluateAlerts, setAlertBroadcast } from './alertEngine.js';

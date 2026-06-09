@@ -63,7 +63,7 @@ export const useAgentsStore = create<AgentsStore>((set) => ({
         mem_total: (metrics.memory as Record<string, unknown> | undefined)?.total as number | null ?? null,
         disk_json: metrics.disk ? JSON.stringify(metrics.disk) : null,
         net_json: metrics.network ? JSON.stringify(metrics.network) : null,
-        docker_json: metrics.docker ? JSON.stringify(metrics.docker) : null,
+        docker_json: null,
       };
       const prev = state.agentMetrics[agentId] ?? [];
       const updated = [...prev.slice(-(BUFFER_MAX - 1)), snap];

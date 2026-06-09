@@ -9,7 +9,7 @@ import {
 import { useAgentsStore } from '../store/agentsStore.ts';
 import type { Agent, AgentMetricSnapshot } from '../types.ts';
 
-type Tab = 'overview' | 'metrics' | 'containers' | 'settings';
+type Tab = 'overview' | 'metrics' | 'settings';
 type Range = '1h' | '6h' | '24h';
 
 function relativeTime(ts: number): string {
@@ -23,15 +23,6 @@ function relativeTime(ts: number): string {
 function authHeader(): Record<string, string> {
   const token = localStorage.getItem('helio-jwt') ?? '';
   return { Authorization: `Bearer ${token}` };
-}
-
-interface ContainerRow {
-  id: string;
-  name: string;
-  status: string;
-  cpu_percent: number;
-  mem_used: number;
-  mem_limit: number;
 }
 
 function StatusDot({ online }: { online: boolean }) {
@@ -127,8 +118,6 @@ export function AgentDetail() {
   const [range, setRange] = useState<Range>('24h');
   const [historyData, setHistoryData] = useState<{ ts: number; cpu: number; ram: number }[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [containers, setContainers] = useState<ContainerRow[]>([]);
-  const [containersLoading, setContainersLoading] = useState(false);
 
   // Settings tab state
   const [name, setName] = useState('');
@@ -172,17 +161,6 @@ export function AgentDetail() {
       .catch(() => setHistoryData([]))
       .finally(() => setHistoryLoading(false));
   }, [tab, id, range]);
-
-  // Fetch containers when tab = containers
-  useEffect(() => {
-    if (tab !== 'containers' || !id) return;
-    setContainersLoading(true);
-    fetch(`/api/agents/${id}/containers`, { headers: authHeader() })
-      .then(r => r.ok ? r.json() : [])
-      .then(setContainers)
-      .catch(() => setContainers([]))
-      .finally(() => setContainersLoading(false));
-  }, [tab, id]);
 
   const handleSaveSettings = async () => {
     if (!id || !agent) return;
@@ -298,10 +276,10 @@ export function AgentDetail() {
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '22px', flexWrap: 'wrap' }}>
-        {(['overview', 'metrics', 'containers', 'settings'] as Tab[]).map(t => (
+        {(['overview', 'metrics', 'settings'] as Tab[]).map(t => (
           <TabBtn
             key={t}
-            label={t === 'overview' ? 'Übersicht' : t === 'metrics' ? 'Metriken' : t === 'containers' ? 'Container' : 'Einstellungen'}
+            label={t === 'overview' ? 'Übersicht' : t === 'metrics' ? 'Metriken' : 'Einstellungen'}
             active={tab === t}
             onClick={() => setTab(t)}
           />
@@ -406,74 +384,6 @@ export function AgentDetail() {
                 </AreaChart>
               </ResponsiveContainer>
             </>
-          )}
-        </>
-      )}
-
-      {/* Tab: Containers */}
-      {tab === 'containers' && (
-        <>
-          {containersLoading ? (
-            <div style={{ color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: '0.85rem', padding: '20px 0' }}>
-              Lade Container…
-            </div>
-          ) : containers.length === 0 ? (
-            <div style={{
-              padding: '32px', textAlign: 'center', color: 'var(--text-dim)',
-              fontFamily: 'var(--font-mono)', fontSize: '0.85rem',
-              border: '1px solid var(--border)', borderRadius: 'var(--radius-lg)',
-            }}>
-              Keine Docker-Container gefunden
-            </div>
-          ) : (
-            <div style={{ border: '1px solid var(--border)', borderRadius: 'var(--radius)', overflow: 'hidden' }}>
-              {/* Header */}
-              <div style={{
-                display: 'grid', gridTemplateColumns: '1fr 100px 80px 80px',
-                padding: '10px 16px', background: 'var(--bg-soft)',
-                borderBottom: '1px solid var(--border)',
-                fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)',
-              }}>
-                <span>Name</span>
-                <span>Status</span>
-                <span style={{ textAlign: 'right' }}>CPU %</span>
-                <span style={{ textAlign: 'right' }}>RAM</span>
-              </div>
-              {containers.map((c, i) => {
-                const statusColor = c.status === 'running' ? 'var(--ok)'
-                  : c.status === 'stopped' ? 'var(--text-dim)'
-                  : 'var(--warn)';
-                return (
-                  <div
-                    key={c.id}
-                    style={{
-                      display: 'grid', gridTemplateColumns: '1fr 100px 80px 80px',
-                      padding: '10px 16px', alignItems: 'center',
-                      borderBottom: i < containers.length - 1 ? '1px solid var(--border)' : 'none',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {c.name.replace(/^\//, '')}
-                    </span>
-                    <span style={{
-                      fontSize: '0.72rem', fontFamily: 'var(--font-mono)',
-                      padding: '2px 8px', borderRadius: '4px', display: 'inline-block',
-                      background: `color-mix(in srgb, ${statusColor} 14%, transparent)`,
-                      color: statusColor,
-                    }}>
-                      {c.status}
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', textAlign: 'right' }}>
-                      {c.cpu_percent.toFixed(1)}%
-                    </span>
-                    <span style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem', textAlign: 'right' }}>
-                      {c.mem_limit > 0 ? `${(c.mem_used / c.mem_limit * 100).toFixed(1)}%` : '—'}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
           )}
         </>
       )}
