@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Helio — Self-hosted Monitoring für Server & Container</title>
+<meta name="description" content="Helio ist Open-Source-Monitoring für Server und Container, das du selbst hostest. Echtzeit-Metriken, Alerting und Status-Pages — privacy-first." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;480;500;540;600;650;680&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- ===================== NAVBAR ===================== -->
+<header class="nav">
+  <div class="container nav-inner">
+    <a href="#top" class="brand" aria-label="Helio Startseite">
+      <span class="brand-mark" aria-hidden="true"></span>
+      Helio
+    </a>
+    <nav class="nav-links" aria-label="Hauptnavigation">
+      <a href="#features">Features</a>
+      <a href="#preise">Preise</a>
+      <a href="#docs">Docs</a>
+      <a href="#github"><svg class="ic-gh" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12.18c0 5.16 3.35 9.53 8 11.08.58.11.79-.26.79-.57v-2.2c-3.26.72-3.95-1.4-3.95-1.4-.53-1.36-1.3-1.72-1.3-1.72-1.06-.74.08-.72.08-.72 1.18.08 1.8 1.23 1.8 1.23 1.04 1.82 2.74 1.3 3.41.99.1-.77.41-1.3.74-1.6-2.6-.3-5.34-1.32-5.34-5.87 0-1.3.46-2.36 1.22-3.19-.12-.3-.53-1.51.12-3.15 0 0 1-.32 3.3 1.22a11.4 11.4 0 0 1 6 0c2.28-1.54 3.29-1.22 3.29-1.22.65 1.64.24 2.85.12 3.15.76.83 1.21 1.89 1.21 3.19 0 4.56-2.75 5.56-5.36 5.86.42.37.8 1.1.8 2.22v3.29c0 .31.21.69.8.57 4.65-1.55 8-5.92 8-11.08C23.5 5.73 18.27.5 12 .5z"/></svg>GitHub</a>
+    </nav>
+    <div class="nav-actions">
+      <button class="theme-toggle" data-theme-toggle aria-label="Farbschema wechseln">
+        <i data-lucide="moon" class="icon-moon"></i>
+        <i data-lucide="sun" class="icon-sun"></i>
+      </button>
+      <a href="#start" class="btn btn-primary btn-sm">Jetzt starten</a>
+      <button class="burger" aria-label="Menü öffnen" aria-expanded="false"><i data-lucide="menu"></i></button>
+    </div>
+  </div>
+</header>
+
+<!-- mobile menu -->
+<nav class="mobile-menu" aria-label="Mobile Navigation">
+  <a href="#features">Features</a>
+  <a href="#preise">Preise</a>
+  <a href="#docs">Docs</a>
+  <a href="#github">GitHub</a>
+  <a href="#start" class="btn btn-primary">Jetzt starten</a>
+</nav>
+
+<main id="top">
+
+<!-- ===================== HERO ===================== -->
+<section class="hero section-pad">
+  <div class="hero-bg" aria-hidden="true"></div>
+  <div class="container hero-inner">
+    <a href="#github" class="gh-pill reveal" aria-label="GitHub Stars">
+      <span class="gh-l"><svg class="ic-gh" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12.18c0 5.16 3.35 9.53 8 11.08.58.11.79-.26.79-.57v-2.2c-3.26.72-3.95-1.4-3.95-1.4-.53-1.36-1.3-1.72-1.3-1.72-1.06-.74.08-.72.08-.72 1.18.08 1.8 1.23 1.8 1.23 1.04 1.82 2.74 1.3 3.41.99.1-.77.41-1.3.74-1.6-2.6-.3-5.34-1.32-5.34-5.87 0-1.3.46-2.36 1.22-3.19-.12-.3-.53-1.51.12-3.15 0 0 1-.32 3.3 1.22a11.4 11.4 0 0 1 6 0c2.28-1.54 3.29-1.22 3.29-1.22.65 1.64.24 2.85.12 3.15.76.83 1.21 1.89 1.21 3.19 0 4.56-2.75 5.56-5.36 5.86.42.37.8 1.1.8 2.22v3.29c0 .31.21.69.8.57 4.65-1.55 8-5.92 8-11.08C23.5 5.73 18.27.5 12 .5z"/></svg>helio/helio</span>
+      <span class="gh-r"><i data-lucide="star"></i>8.247</span>
+    </a>
+    <h1 class="display reveal d1">Monitoring, das dir gehört.<br /><span class="accent">Auf deinem Server.</span></h1>
+    <p class="lead reveal d2">Helio überwacht Server, Container und Dienste in Echtzeit — komplett self-hosted, Open Source und ohne Cloud-Zwang. Metriken, Alerting und Status-Pages in einem schlanken Binary.</p>
+    <div class="hero-cta reveal d3">
+      <a href="#start" class="btn btn-primary btn-lg">Kostenlos hosten</a>
+      <a href="#demo" class="btn btn-secondary btn-lg"><i data-lucide="play"></i>Demo ansehen</a>
+    </div>
+    <p class="hero-note reveal d3"><i data-lucide="check-circle-2"></i>Ein Binary · keine Datenbank nötig · in unter 60 Sekunden live</p>
+
+    <!-- Dashboard mockup -->
+    <div class="mockup-wrap reveal d4">
+      <div class="mockup">
+        <div class="mockup-bar">
+          <span class="traffic" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="mockup-url"><i data-lucide="lock"></i>helio.dein-server.de/dashboard</span>
+        </div>
+        <div class="mockup-body">
+          <aside class="mock-side">
+            <div class="si active"><i data-lucide="layout-dashboard"></i>Übersicht</div>
+            <div class="si"><i data-lucide="server"></i>Nodes</div>
+            <div class="si"><i data-lucide="box"></i>Container</div>
+            <div class="si"><i data-lucide="bell"></i>Alerts</div>
+            <div class="si"><i data-lucide="activity"></i>Status-Page</div>
+            <div class="si-label">System</div>
+            <div class="si"><i data-lucide="settings"></i>Einstellungen</div>
+            <div class="si"><i data-lucide="users"></i>Team</div>
+          </aside>
+          <div class="mock-main">
+            <div class="mock-h">
+              <h4>Übersicht</h4>
+              <span class="sub">Letzte 24 h · live</span>
+            </div>
+            <div class="mock-stats">
+              <div class="stat-card">
+                <div class="lbl"><span>CPU-Auslastung</span><span class="t up">↘ 4,2 %</span></div>
+                <div class="val">37,4<small> %</small></div>
+                <svg class="spark" viewBox="0 0 280 56" preserveAspectRatio="none" width="100%" height="48" aria-hidden="true">
+                  <defs><linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="var(--primary)" stop-opacity="0.35"/>
+                    <stop offset="1" stop-color="var(--primary)" stop-opacity="0"/>
+                  </linearGradient></defs>
+                  <path d="M0,40 L24,36 48,42 72,30 96,33 120,22 144,28 168,18 192,26 216,14 240,20 264,12 280,16 L280,56 L0,56 Z" fill="url(#g1)"/>
+                  <path d="M0,40 L24,36 48,42 72,30 96,33 120,22 144,28 168,18 192,26 216,14 240,20 264,12 280,16" fill="none" stroke="var(--primary)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <div class="stat-card">
+                <div class="lbl"><span>Arbeitsspeicher</span><span class="t">12,1 / 32 GB</span></div>
+                <div class="val">38<small> %</small></div>
+                <div class="bars" aria-hidden="true">
+                  <i style="height:42%"></i><i style="height:55%"></i><i style="height:48%"></i><i style="height:67%"></i>
+                  <i style="height:60%"></i><i style="height:72%"></i><i style="height:51%"></i><i style="height:80%"></i>
+                  <i style="height:64%"></i><i style="height:58%"></i><i style="height:74%"></i><i style="height:46%"></i>
+                </div>
+              </div>
+            </div>
+            <div class="mock-servers">
+              <div class="srow">
+                <span class="name"><span class="dot dot-ok pulse" style="color:var(--ok)"></span><span class="nm">web-01</span></span>
+                <span class="meta">99,99 % SLA</span>
+                <span class="meta" data-jitter="24">24ms</span>
+                <span class="badge badge-status ok">online</span>
+              </div>
+              <div class="srow">
+                <span class="name"><span class="dot dot-ok" style="color:var(--ok)"></span><span class="nm">db-primary</span></span>
+                <span class="meta">99,97 % SLA</span>
+                <span class="meta" data-jitter="11">11ms</span>
+                <span class="badge badge-status ok">online</span>
+              </div>
+              <div class="srow">
+                <span class="name"><span class="dot dot-warn" style="color:var(--warn)"></span><span class="nm">cache-02</span></span>
+                <span class="meta">98,40 % SLA</span>
+                <span class="meta" data-jitter="86">86ms</span>
+                <span class="badge badge-status warn">latenz</span>
+              </div>
+              <div class="srow">
+                <span class="name"><span class="dot dot-ok" style="color:var(--ok)"></span><span class="nm">worker-eu-1</span></span>
+                <span class="meta">99,95 % SLA</span>
+                <span class="meta" data-jitter="32">32ms</span>
+                <span class="badge badge-status ok">online</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== TRUSTED BY ===================== -->
+<section class="trusted divider">
+  <div class="container">
+    <p class="reveal">Vertraut von Homelabs & Teams weltweit</p>
+    <div class="logo-row reveal d1">
+      <span class="logo-ph"><span class="lm circle"></span>Nimbus</span>
+      <span class="logo-ph"><span class="lm"></span>Forgelab</span>
+      <span class="logo-ph"><span class="lm diamond"></span>Octa&shy;Hosting</span>
+      <span class="logo-ph"><span class="lm circle"></span>kern.io</span>
+      <span class="logo-ph"><span class="lm"></span>Stratus</span>
+      <span class="logo-ph"><span class="lm diamond"></span>HomeRack</span>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FEATURES ===================== -->
+<section class="section-pad divider" id="features">
+  <div class="container">
+    <div class="section-head center">
+      <span class="eyebrow reveal">Funktionen</span>
+      <h2 class="h2 reveal d1">Alles, was du zum Überwachen brauchst</h2>
+      <p class="lead reveal d2">Ein einziges Tool für Metriken, Alarme und Transparenz — ohne fünf verschiedene Dienste zusammenzukleben.</p>
+    </div>
+    <div class="feat-grid">
+      <article class="feat-card reveal">
+        <div class="feat-ico"><i data-lucide="line-chart"></i></div>
+        <h3 class="h3">Echtzeit-Metriken</h3>
+        <p>CPU, RAM, Disk, Netzwerk und I/O im Sekundentakt. Sauber gerenderte Charts mit historischen Daten und frei wählbaren Zeitfenstern.</p>
+      </article>
+      <article class="feat-card reveal d1">
+        <div class="feat-ico"><i data-lucide="bell-ring"></i></div>
+        <h3 class="h3">Alerting</h3>
+        <p>Regelbasierte Alarme per Webhook, E-Mail, Slack oder Discord. Definiere Schwellwerte, Eskalationen und Ruhezeiten exakt nach Bedarf.</p>
+      </article>
+      <article class="feat-card v reveal d2">
+        <div class="feat-ico"><i data-lucide="container"></i></div>
+        <h3 class="h3">Docker-Integration</h3>
+        <p>Container werden automatisch erkannt. Pro-Container-Metriken, Logs und Health-Checks — ganz ohne manuelle Konfiguration.</p>
+      </article>
+      <article class="feat-card reveal">
+        <div class="feat-ico"><i data-lucide="shield-check"></i></div>
+        <h3 class="h3">Self-Hosted &amp; Privacy-First</h3>
+        <p>Deine Daten verlassen nie deinen Server. Keine Telemetrie, keine Account-Pflicht, keine Cloud-Abhängigkeit — du behältst die Kontrolle.</p>
+      </article>
+      <article class="feat-card reveal d1">
+        <div class="feat-ico"><i data-lucide="globe"></i></div>
+        <h3 class="h3">Status-Page</h3>
+        <p>Öffentliche oder interne Status-Seite mit einem Klick. Zeige Uptime, laufende Vorfälle und geplante Wartungen transparent an.</p>
+      </article>
+      <article class="feat-card v reveal d2">
+        <div class="feat-ico"><i data-lucide="network"></i></div>
+        <h3 class="h3">Multi-Node</h3>
+        <p>Überwache hunderte Nodes aus einem Dashboard. Leichtgewichtige Agents verbinden sich verschlüsselt mit deiner zentralen Instanz.</p>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== SPLIT HIGHLIGHTS ===================== -->
+<section class="section-pad divider">
+  <div class="container">
+
+    <!-- Split 1: Alerting -->
+    <div class="split">
+      <div class="split-text reveal">
+        <span class="eyebrow">Alerting</span>
+        <h2 class="h2">Erfahre von Problemen, bevor deine Nutzer es tun</h2>
+        <p class="lead">Definiere präzise Regeln und lass Helio den Rest erledigen. Alarme landen dort, wo dein Team ohnehin schon ist.</p>
+        <ul class="split-list">
+          <li><span class="ci"><i data-lucide="check"></i></span><div><b>Flexible Kanäle</b><span>Webhook, E-Mail, Slack, Discord, Telegram oder PagerDuty.</span></div></li>
+          <li><span class="ci"><i data-lucide="check"></i></span><div><b>Smarte Schwellwerte</b><span>Eskalationsstufen, Ruhezeiten und automatisches Auto-Resolve.</span></div></li>
+          <li><span class="ci"><i data-lucide="check"></i></span><div><b>Kein Alarm-Spam</b><span>Gruppierung &amp; Deduplizierung verhindern Benachrichtigungs-Fluten.</span></div></li>
+        </ul>
+      </div>
+      <div class="split-visual reveal d2">
+        <div class="panel">
+          <div class="panel-head">
+            <span class="pt"><i data-lucide="bell-ring"></i>Alert-Verlauf</span>
+            <span class="badge"><span class="dot dot-ok"></span>3 aktiv</span>
+          </div>
+          <div class="panel-body">
+            <div class="alert-item down">
+              <span class="ai-ico"><i data-lucide="alert-octagon"></i></span>
+              <div class="ai-main"><div class="ai-t">cache-02 antwortet nicht</div><div class="ai-d">HTTP 503 · 3 Versuche fehlgeschlagen</div></div>
+              <span class="ai-time">vor 2 min</span>
+            </div>
+            <div class="alert-item warn">
+              <span class="ai-ico"><i data-lucide="alert-triangle"></i></span>
+              <div class="ai-main"><div class="ai-t">web-01 CPU &gt; 85 %</div><div class="ai-d">Schwellwert seit 4 min überschritten</div></div>
+              <span class="ai-time">vor 6 min</span>
+            </div>
+            <div class="alert-item ok">
+              <span class="ai-ico"><i data-lucide="check"></i></span>
+              <div class="ai-main"><div class="ai-t">db-primary wiederhergestellt</div><div class="ai-d">Latenz wieder im Normalbereich</div></div>
+              <span class="ai-time">vor 18 min</span>
+            </div>
+            <div class="chip-row">
+              <span class="chip"><i data-lucide="webhook"></i>Webhook</span>
+              <span class="chip"><i data-lucide="mail"></i>E-Mail</span>
+              <span class="chip"><i data-lucide="message-square"></i>Slack</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Split 2: Docker -->
+    <div class="split rev">
+      <div class="split-text reveal">
+        <span class="eyebrow">Container</span>
+        <h2 class="h2">Docker-Monitoring ohne Setup-Schmerzen</h2>
+        <p class="lead">Helio findet deine Container von selbst und beginnt sofort mit dem Sammeln von Metriken. Ein Befehl, fertig.</p>
+        <ul class="split-list">
+          <li><span class="ci"><i data-lucide="check"></i></span><div><b>Auto-Discovery</b><span>Neue Container erscheinen automatisch im Dashboard.</span></div></li>
+          <li><span class="ci"><i data-lucide="check"></i></span><div><b>Pro-Container-Metriken</b><span>CPU, RAM, Netzwerk-I/O und Restart-Counts je Service.</span></div></li>
+          <li><span class="ci"><i data-lucide="check"></i></span><div><b>Health-Checks &amp; Logs</b><span>Live-Logs und Status direkt aus dem Dashboard.</span></div></li>
+        </ul>
+      </div>
+      <div class="split-visual reveal d2">
+        <div class="panel">
+          <div class="panel-head">
+            <span class="pt"><i data-lucide="terminal"></i>Schnellstart</span>
+            <span class="badge mono">docker</span>
+          </div>
+          <div class="panel-body">
+            <div class="term">
+              <div class="term-line"><span class="pr">$</span><span class="cm">docker run -d --name helio \</span></div>
+              <div class="term-line out">-v /var/run/docker.sock:/var/run/docker.sock \</div>
+              <div class="term-line out">-p 9300:9300 helio/helio:latest</div>
+              <div class="term-line out"><span class="g">✓</span> Helio läuft auf :9300</div>
+              <div class="term-line out"><span class="g">✓</span> 14 Container automatisch erkannt</div>
+              <div class="term-line out"><span class="g">✓</span> Sammle Metriken …</div>
+            </div>
+            <div class="chip-row">
+              <span class="chip"><span class="dot dot-ok"></span>14 Container</span>
+              <span class="chip"><i data-lucide="cpu"></i>Auto-Discovery</span>
+              <span class="chip"><i data-lucide="scroll-text"></i>Live-Logs</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ===================== LIVE DEMO ===================== -->
+<section class="live section-pad" id="demo">
+  <div class="container">
+    <div class="section-head center">
+      <span class="eyebrow reveal">Live</span>
+      <h2 class="h2 reveal d1">Über tausende Instanzen im Einsatz</h2>
+      <p class="lead reveal d2">Eine leichtgewichtige Engine, die mitwächst — vom Single-Board-Computer bis zum Multi-Node-Cluster.</p>
+    </div>
+    <div class="live-grid">
+      <div class="live-card reveal">
+        <div class="lc-ico"><i data-lucide="server"></i></div>
+        <div class="live-num"><span data-count="48210">0</span></div>
+        <div class="lc-lbl">überwachte Nodes</div>
+      </div>
+      <div class="live-card reveal d1">
+        <div class="lc-ico"><i data-lucide="zap"></i></div>
+        <div class="live-num"><span data-count="2.4" data-decimals="1">0</span><span class="u"> M</span></div>
+        <div class="lc-lbl">Metriken pro Minute</div>
+      </div>
+      <div class="live-card reveal d2">
+        <div class="lc-ico"><i data-lucide="gauge"></i></div>
+        <div class="live-num"><span data-count="99.98" data-decimals="2">0</span><span class="u"> %</span></div>
+        <div class="lc-lbl">durchschn. Uptime</div>
+      </div>
+      <div class="live-card reveal d3">
+        <div class="lc-ico"><i data-lucide="hard-drive"></i></div>
+        <div class="live-num"><span data-count="42">0</span><span class="u"> MB</span></div>
+        <div class="lc-lbl">RAM-Footprint</div>
+      </div>
+    </div>
+    <div class="live-status reveal d3">
+      <span class="dot"></span>Alle Systeme betriebsbereit · Status live aktualisiert
+    </div>
+  </div>
+</section>
+
+<!-- ===================== PRICING ===================== -->
+<section class="section-pad divider" id="preise">
+  <div class="container">
+    <div class="section-head center">
+      <span class="eyebrow reveal">Preise</span>
+      <h2 class="h2 reveal d1">Fair &amp; transparent — für alle Größen</h2>
+      <p class="lead reveal d2">Self-Hosted ist und bleibt kostenlos. Bezahlte Pläne fügen Komfort und Team-Funktionen hinzu.</p>
+    </div>
+    <div class="price-grid">
+      <article class="price-card reveal">
+        <div class="price-name">Self-Hosted</div>
+        <p class="price-desc">Für Homelabs und Einzelprojekte. Open Source, für immer kostenlos.</p>
+        <div class="price-amt"><span class="num">€0</span><span class="per">/ für immer</span></div>
+        <a href="#start" class="btn btn-secondary">Loslegen</a>
+        <ul class="price-feats">
+          <li><span class="ck"><i data-lucide="check"></i></span>Unbegrenzte Nodes &amp; Container</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>Echtzeit-Metriken &amp; Charts</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>Webhook- &amp; E-Mail-Alerts</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>1 Status-Page</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>Community-Support</li>
+        </ul>
+      </article>
+
+      <article class="price-card feat reveal d1">
+        <span class="price-pop">Beliebt</span>
+        <div class="price-name">Pro</div>
+        <p class="price-desc">Für ernsthafte Self-Hoster, die mehr Komfort und Integrationen wollen.</p>
+        <div class="price-amt"><span class="num">€12</span><span class="per">/ Monat</span></div>
+        <a href="#start" class="btn btn-primary">14 Tage testen</a>
+        <ul class="price-feats">
+          <li><span class="ck"><i data-lucide="check"></i></span>Alles aus Self-Hosted</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>Slack, Discord &amp; PagerDuty</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>1 Jahr Metrik-Historie</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>Unbegrenzte Status-Pages</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>Priorisierter Support</li>
+        </ul>
+      </article>
+
+      <article class="price-card reveal d2">
+        <div class="price-name">Team</div>
+        <p class="price-desc">Für Teams mit Rollen, Audit-Logs und SSO-Anforderungen.</p>
+        <div class="price-amt"><span class="num">€39</span><span class="per">/ Monat</span></div>
+        <a href="#start" class="btn btn-secondary">Vertrieb kontaktieren</a>
+        <ul class="price-feats">
+          <li><span class="ck"><i data-lucide="check"></i></span>Alles aus Pro</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>Rollen &amp; Berechtigungen</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>SSO (SAML / OIDC)</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>Audit-Logs</li>
+          <li><span class="ck"><i data-lucide="check"></i></span>SLA &amp; dedizierter Support</li>
+        </ul>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FAQ ===================== -->
+<section class="section-pad divider" id="docs">
+  <div class="container">
+    <div class="section-head center">
+      <span class="eyebrow reveal">FAQ</span>
+      <h2 class="h2 reveal d1">Häufige Fragen</h2>
+    </div>
+    <div class="faq reveal d1">
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Muss ich Helio wirklich selbst hosten?<span class="pm" aria-hidden="true"></span></button>
+        <div class="faq-a"><div class="faq-a-inner">Ja — und genau das ist der Punkt. Helio läuft vollständig auf deiner eigenen Infrastruktur, sodass deine Metriken niemals einen fremden Server erreichen. Du brauchst nur Docker oder ein einzelnes Binary; eine externe Datenbank ist nicht erforderlich.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Wie unterscheidet sich Helio von Grafana oder Uptime Kuma?<span class="pm" aria-hidden="true"></span></button>
+        <div class="faq-a"><div class="faq-a-inner">Helio kombiniert Metrik-Erfassung, Alerting und Status-Pages in einem einzigen Tool — ohne dass du Prometheus, Grafana und einen Uptime-Checker separat betreiben und verbinden musst. Der Fokus liegt auf einfacher Einrichtung und einem schlanken Footprint von rund 42 MB RAM.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Welche Systeme und Plattformen werden unterstützt?<span class="pm" aria-hidden="true"></span></button>
+        <div class="faq-a"><div class="faq-a-inner">Linux (x86-64 &amp; ARM, inkl. Raspberry Pi), Docker und Kubernetes. Agents laufen auf praktisch jedem Host; das Dashboard funktioniert in jedem modernen Browser. macOS- und Windows-Hosts werden über den Agent ebenfalls überwacht.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Ist Helio wirklich Open Source?<span class="pm" aria-hidden="true"></span></button>
+        <div class="faq-a"><div class="faq-a-inner">Ja. Der Kern von Helio steht unter der Apache-2.0-Lizenz und ist vollständig auf GitHub einsehbar. Die kostenpflichtigen Pläne fügen lediglich gehostete Komfortfunktionen und Team-Features hinzu — die self-hosted Variante bleibt für immer frei.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Wie funktioniert das Alerting genau?<span class="pm" aria-hidden="true"></span></button>
+        <div class="faq-a"><div class="faq-a-inner">Du definierst Regeln auf Basis von Schwellwerten oder Ausfällen und ordnest ihnen Kanäle zu — Webhook, E-Mail, Slack, Discord, Telegram oder PagerDuty. Eskalationsstufen, Ruhezeiten und automatisches Auto-Resolve sind eingebaut, und Alarme werden gruppiert, um Benachrichtigungs-Spam zu vermeiden.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q" aria-expanded="false">Kann ich von einem anderen Tool migrieren?<span class="pm" aria-hidden="true"></span></button>
+        <div class="faq-a"><div class="faq-a-inner">In den meisten Fällen ja. Helio importiert Prometheus-kompatible Metriken und kann bestehende Uptime-Checks übernehmen. Unsere Docs enthalten Schritt-für-Schritt-Anleitungen für die gängigsten Setups.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================== FINAL CTA ===================== -->
+<section class="section-pad cta" id="start">
+  <div class="container">
+    <div class="cta-box reveal">
+      <span class="eyebrow" style="justify-content:center">Loslegen</span>
+      <h2 class="h2" style="margin-top:14px">In 60 Sekunden live</h2>
+      <p class="lead">Ein Befehl genügt. Kein Account, keine Kreditkarte, keine Cloud. Starte Helio jetzt auf deinem eigenen Server.</p>
+      <div class="cta-actions">
+        <a href="#" class="btn btn-primary btn-lg">Kostenlos hosten</a>
+        <a href="#docs" class="btn btn-secondary btn-lg"><i data-lucide="book-open"></i>Zur Dokumentation</a>
+      </div>
+      <div class="code-snip">
+        <code><span class="pr">$</span> curl -fsSL helio.sh/install | sh</code>
+        <button class="copy-btn" data-copy="curl -fsSL helio.sh/install | sh" aria-label="Befehl kopieren">
+          <i data-lucide="copy" class="ic-copy"></i>
+          <i data-lucide="check" class="ic-check"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ===================== FOOTER ===================== -->
+<footer class="footer" id="github">
+  <div class="container">
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a href="#top" class="brand"><span class="brand-mark" aria-hidden="true"></span>Helio</a>
+        <p>Open-Source-Monitoring für Server und Container, das du selbst hostest. Privacy-first, schlank und schnell.</p>
+        <div class="footer-social">
+          <a href="#github" aria-label="GitHub"><svg class="ic-gh" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12.18c0 5.16 3.35 9.53 8 11.08.58.11.79-.26.79-.57v-2.2c-3.26.72-3.95-1.4-3.95-1.4-.53-1.36-1.3-1.72-1.3-1.72-1.06-.74.08-.72.08-.72 1.18.08 1.8 1.23 1.8 1.23 1.04 1.82 2.74 1.3 3.41.99.1-.77.41-1.3.74-1.6-2.6-.3-5.34-1.32-5.34-5.87 0-1.3.46-2.36 1.22-3.19-.12-.3-.53-1.51.12-3.15 0 0 1-.32 3.3 1.22a11.4 11.4 0 0 1 6 0c2.28-1.54 3.29-1.22 3.29-1.22.65 1.64.24 2.85.12 3.15.76.83 1.21 1.89 1.21 3.19 0 4.56-2.75 5.56-5.36 5.86.42.37.8 1.1.8 2.22v3.29c0 .31.21.69.8.57 4.65-1.55 8-5.92 8-11.08C23.5 5.73 18.27.5 12 .5z"/></svg></a>
+          <a href="#" aria-label="Discord"><i data-lucide="message-circle"></i></a>
+          <a href="#" aria-label="X"><svg class="ic-x" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817-5.97 6.817H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/></svg></a>
+          <a href="#" aria-label="RSS"><i data-lucide="rss"></i></a>
+        </div>
+      </div>
+      <div class="footer-col">
+        <h5>Produkt</h5>
+        <ul>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#preise">Preise</a></li>
+          <li><a href="#demo">Live-Demo</a></li>
+          <li><a href="#">Changelog</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Ressourcen</h5>
+        <ul>
+          <li><a href="#docs">Dokumentation</a></li>
+          <li><a href="#">Installation</a></li>
+          <li><a href="#">API-Referenz</a></li>
+          <li><a href="#">Status-Page-Guide</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Community</h5>
+        <ul>
+          <li><a href="#github">GitHub</a></li>
+          <li><a href="#">Discord</a></li>
+          <li><a href="#">Roadmap</a></li>
+          <li><a href="#">Beitragen</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h5>Rechtliches</h5>
+        <ul>
+          <li><a href="#">Impressum</a></li>
+          <li><a href="#">Datenschutz</a></li>
+          <li><a href="#">Lizenz (Apache 2.0)</a></li>
+          <li><a href="#">Sicherheit</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© 2026 Helio. Open Source unter Apache 2.0.</p>
+      <span class="fb-status"><span class="dot dot-ok"></span>Alle Systeme betriebsbereit</span>
+    </div>
+  </div>
+</footer>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+  window.addEventListener("DOMContentLoaded", function () {
+    if (window.lucide) lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
+  });
+</script>
+<script src="app.js"></script>
+
+</body>
+</html>
