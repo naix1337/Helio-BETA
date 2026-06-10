@@ -10,12 +10,10 @@
   },
   "dependencies": {
     "systeminformation": "^5.23.0",
-    "ws": "^8.18.0",
-    "dockerode": "^4.0.0"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/ws": "^8.5.10",
-    "@types/dockerode": "^3.3.29",
     "@types/node": "^20.14.0",
     "typescript": "^5.4.5",
     "tsx": "^4.15.0"

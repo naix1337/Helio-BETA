@@ -33,16 +33,4 @@ export interface AgentMetrics {
     hostname: string;
     arch: string;
   };
-  docker?: {
-    available: boolean;
-    containers: Array<{
-      id: string;
-      name: string;
-      status: string;
-      state: string;
-      cpuPercent: number;
-      memUsage: number;
-      memLimit: number;
-    }>;
-  };
 }

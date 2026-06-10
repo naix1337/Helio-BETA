@@ -121,45 +121,13 @@ async function collectNetwork(): Promise<AgentMetrics['network']> {
   return result;
 }
 
-async function collectDocker(): Promise<AgentMetrics['docker']> {
-  try {
-    const containers = await si.dockerContainers('active');
-    if (!containers || containers.length === 0) {
-      return { available: true, containers: [] };
-    }
-
-    const stats = await si.dockerContainerStats('*');
-    const statsMap = new Map(stats.map(s => [s.id, s]));
-
-    return {
-      available: true,
-      containers: containers.map(c => {
-        const s = statsMap.get(c.id);
-        return {
-          id: c.id,
-          name: c.name,
-          status: c.status,
-          state: c.state,
-          cpuPercent: s ? Math.round((s.cpuPercent ?? 0) * 100) / 100 : 0,
-          memUsage: s ? (s.memUsage ?? 0) : 0,
-          memLimit: s ? (s.memLimit ?? 0) : 0,
-        };
-      }),
-    };
-  } catch {
-    // Docker socket not available or permission denied
-    return { available: false, containers: [] };
-  }
-}
-
 export async function collectMetrics(): Promise<AgentMetrics> {
-  const [cpu, memory, disk, network, osInfo, dockerData] = await Promise.all([
+  const [cpu, memory, disk, network, osInfo] = await Promise.all([
     collectCpu(),
     collectMemory(),
     collectDisk(),
     collectNetwork(),
     getOsInfo(),
-    collectDocker(),
   ]);
 
   return {
@@ -176,6 +144,5 @@ export async function collectMetrics(): Promise<AgentMetrics> {
       hostname: osInfo.hostname,
       arch: osInfo.arch,
     },
-    docker: dockerData,
   };
 }
