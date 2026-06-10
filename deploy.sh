@@ -6,7 +6,7 @@ REPO_URL="https://github.com/naix1337/helio.git"
 APP_DIR="${HELIO_DIR:-/opt/helio}"
 APP_NAME="helio"
 PORT="${PORT:-3001}"
-DB_PATH="${HELIO_DB_PATH:-$APP_DIR/helio-app/backend/helio.db}"
+DB_PATH="${HELIO_DB_PATH:-$APP_DIR/helio.db}"
 
 # ── Colors ────────────────────────────────────────────────────────────────────
 G='\033[0;32m'; Y='\033[1;33m'; R='\033[0;31m'; N='\033[0m'
@@ -15,13 +15,13 @@ warn() { echo -e "${Y}[helio]${N} $*"; }
 die()  { echo -e "${R}[helio] ERROR:${N} $*" >&2; exit 1; }
 
 # ── Checks ────────────────────────────────────────────────────────────────────
-command -v node  >/dev/null 2>&1 || die "Node.js not found. Install Node 20 LTS."
-command -v npm   >/dev/null 2>&1 || die "npm not found."
-command -v git   >/dev/null 2>&1 || die "git not found."
+command -v node >/dev/null 2>&1 || die "Node.js not found. Install Node 20 LTS."
+command -v npm  >/dev/null 2>&1 || die "npm not found."
+command -v git  >/dev/null 2>&1 || die "git not found."
 
 NODE_MAJOR=$(node -e "process.stdout.write(process.versions.node.split('.')[0])")
-if [ "$NODE_MAJOR" -lt 18 ] || [ "$NODE_MAJOR" -gt 22 ]; then
-  warn "Node v$NODE_MAJOR detected. Recommended: Node 20 LTS (v26+ breaks better-sqlite3)."
+if [ "$NODE_MAJOR" -gt 22 ]; then
+  warn "Node v$NODE_MAJOR detected — better-sqlite3 may break. Node 20 LTS is recommended."
 fi
 
 # Install PM2 globally if missing
@@ -36,34 +36,34 @@ if pm2 list 2>/dev/null | grep -q "\b$APP_NAME\b"; then
   pm2 delete "$APP_NAME"
 fi
 
-# ── Step 2: Pull or clone ─────────────────────────────────────────────────────
+# ── Step 2: Pull or clone (main branch = app code) ───────────────────────────
 if [ -d "$APP_DIR/.git" ]; then
   log "Pulling latest code from GitHub..."
-  git -C "$APP_DIR" pull --ff-only
-  git -C "$APP_DIR" submodule update --init --recursive
+  git -C "$APP_DIR" fetch origin main
+  git -C "$APP_DIR" reset --hard origin/main
 else
   log "Cloning repository to $APP_DIR..."
-  git clone --recurse-submodules "$REPO_URL" "$APP_DIR"
+  git clone --branch main --single-branch "$REPO_URL" "$APP_DIR"
 fi
 
-# ── Step 3: Build frontend ────────────────────────────────────────────────────
-log "Installing & building frontend..."
-npm install --prefix "$APP_DIR/helio-app/frontend"
-npm run build --prefix "$APP_DIR/helio-app/frontend"
+# ── Step 3: Install & build (npm workspace at repo root) ─────────────────────
+log "Installing dependencies..."
+npm ci --prefix "$APP_DIR"
 
-# ── Step 4: Build backend ─────────────────────────────────────────────────────
-log "Installing & building backend..."
-npm install --prefix "$APP_DIR/helio-app/backend"
-npm run build --prefix "$APP_DIR/helio-app/backend"
+log "Building frontend..."
+npm run build -w frontend --prefix "$APP_DIR"
 
-# ── Step 5: Write PM2 ecosystem and start ─────────────────────────────────────
+log "Building backend..."
+npm run build -w backend --prefix "$APP_DIR"
+
+# ── Step 4: Write PM2 ecosystem and start ────────────────────────────────────
 ECOSYSTEM=$(mktemp /tmp/helio-ecosystem.XXXXXX.cjs)
 cat > "$ECOSYSTEM" <<EOF
 module.exports = {
   apps: [{
     name: '$APP_NAME',
-    script: '$APP_DIR/helio-app/backend/dist/index.js',
-    cwd: '$APP_DIR/helio-app/backend',
+    script: '$APP_DIR/backend/dist/index.js',
+    cwd: '$APP_DIR/backend',
     env: {
       NODE_ENV: 'production',
       PORT: '$PORT',
@@ -85,5 +85,5 @@ pm2 save
 
 rm -f "$ECOSYSTEM"
 
-log "Done. Helio is running → http://localhost:$PORT"
+log "Done. Helio läuft → http://$(hostname -I | awk '{print $1}'):$PORT"
 log "Logs: pm2 logs $APP_NAME"
