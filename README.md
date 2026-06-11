@@ -48,17 +48,18 @@
 
 ### Prerequisites
 
-- Node.js 20+
-- **Visual Studio Build Tools** with "Desktop development with C++" (needed by `better-sqlite3`)
+- **Node.js 20+** (Node v26 breaks `better-sqlite3` native addon)
+- **Visual Studio Build Tools** with "Desktop development with C++" (needed by `better-sqlite3` on Windows)
   ```
   winget install Microsoft.VisualStudio.2022.BuildTools
   ```
+- On Linux: `build-essential` and `python3`
 
-### Run
+### Local Run
 
 ```bash
 git clone https://github.com/naix1337/helio.git
-cd helio
+cd helio/helio-app
 npm install
 npm run build
 NODE_ENV=production npm start
@@ -68,10 +69,60 @@ NODE_ENV=production npm start
 ### Development (hot reload)
 
 ```bash
+cd helio/helio-app
 npm run dev
 # Backend  → http://localhost:3001  (tsx watch)
 # Frontend → http://localhost:5173  (Vite + API proxy)
 ```
+
+### Linux Production Deployment (PM2)
+
+Ein automatisches Deploy-Script ist enthalten:
+
+```bash
+# Auf dem Linux-Server:
+git clone https://github.com/naix1337/helio.git
+cd helio
+chmod +x deploy.sh
+
+# Standard-Pfad: /opt/helio
+./deploy.sh
+
+# Oder mit benutzerdefiniertem Pfad:
+HELIO_DIR=/var/www/helio ./deploy.sh
+```
+
+Das Script:
+1. Klont das Repo in den Zielordner
+2. Installiert Abhängigkeiten (`npm install`)
+3. Baut Backend + Frontend
+4. Startet die App via PM2 (mit Auto-Restart)
+5. Überschreibt existierende Installationen sauber
+
+### Agent Package (Remote Monitoring)
+
+Für entfernte Server, die nicht direkt vom Helio-Backend erreichbar sind:
+
+```bash
+cd helio/agent
+npm install
+npm run build
+
+# Start mit Verbindung zum Helio-Server:
+HELIO_WS_URL=ws://helio-server:3001/ws/agent \
+HELIO_AGENT_TOKEN=dein-agent-token \
+npm start
+```
+
+Der Agent sendet CPU, RAM, Disk, Network und Docker-Metriken per WebSocket an den Helio-Server. Das Token wird im Helio-Dashboard unter **Agents → Agent hinzufügen** generiert.
+
+### Proxmox Auto-Discovery
+
+1. Im Proxmox VE unter `Datacenter → Permissions → API Tokens` einen Token erstellen
+2. Im Helio-Dashboard auf der **Nodes-Seite** auf "Proxmox-Verbindung hinzufügen" klicken
+3. Host, Port (8006), API Token ID und Secret eingeben
+4. Scan-Intervall konfigurieren (20s – 3600s)
+5. Fertig! Alle LXC-Container und QEMU-VMs werden automatisch als Agents angelegt
 
 ## Project Structure
 
@@ -173,12 +224,12 @@ helio/
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `PORT` | `3001` | HTTP server port |
-| `NODE_ENV` | — | Set to `production` to serve frontend build |
+| `NODE_ENV` | — | Set to `production` to serve frontend build and lock CORS |
 | `HELIO_DB_PATH` | `./helio.db` | SQLite database path |
 | `JWT_SECRET` | auto-generated | JWT signing key (set for persistence across restarts) |
 | `HELIO_AGENT_TOKENS` | — | Comma-separated agent tokens (alternative to DB tokens) |
-| `HELIO_ENCRYPTION_KEY` | derived from DB path | AES-256-GCM key for encrypted storage (32 bytes hex) |
-
+| `HELIO_ENCRYPTION_KEY` | derived from DB path | AES-256-GCM key for encrypted Proxmox API tokens (32 bytes hex) |
+| `HELIO_DIR` | `/opt/helio` | Installationspfad (nur für `deploy.sh`) |
 ## License
 
 MIT
