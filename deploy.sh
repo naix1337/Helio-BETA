@@ -4,6 +4,7 @@ set -euo pipefail
 # ── Config ────────────────────────────────────────────────────────────────────
 REPO_URL="https://github.com/naix1337/helio.git"
 APP_DIR="${HELIO_DIR:-/opt/helio}"
+HELIO_SRC="$APP_DIR/helio-app"
 APP_NAME="helio"
 PORT="${PORT:-3001}"
 DB_PATH="${HELIO_DB_PATH:-$APP_DIR/helio.db}"
@@ -36,25 +37,33 @@ if pm2 list 2>/dev/null | grep -q "\b$APP_NAME\b"; then
   pm2 delete "$APP_NAME"
 fi
 
-# ── Step 2: Pull or clone (main branch = app code) ───────────────────────────
+# ── Step 2: Pull or clone ─────────────────────────────────────────────────────
 if [ -d "$APP_DIR/.git" ]; then
   log "Pulling latest code from GitHub..."
   git -C "$APP_DIR" fetch origin main
   git -C "$APP_DIR" reset --hard origin/main
+  # Update submodule (helio-app/)
+  git -C "$APP_DIR" submodule update --init
 else
   log "Cloning repository to $APP_DIR..."
   git clone --branch main --single-branch "$REPO_URL" "$APP_DIR"
+  git -C "$APP_DIR" submodule update --init
 fi
 
-# ── Step 3: Install & build (npm workspace at repo root) ─────────────────────
+# Ensure helio-app exists post-clone
+if [ ! -d "$HELIO_SRC" ]; then
+  die "helio-app/ directory not found after clone. Check submodule setup."
+fi
+
+# ── Step 3: Install & build (workspace is in helio-app/) ──────────────────────
 log "Installing dependencies..."
-npm ci --prefix "$APP_DIR"
+npm ci --prefix "$HELIO_SRC"
 
 log "Building frontend..."
-npm run build -w frontend --prefix "$APP_DIR"
+npm run build -w frontend --prefix "$HELIO_SRC"
 
 log "Building backend..."
-npm run build -w backend --prefix "$APP_DIR"
+npm run build -w backend --prefix "$HELIO_SRC"
 
 # ── Step 4: Write PM2 ecosystem and start ────────────────────────────────────
 ECOSYSTEM=$(mktemp /tmp/helio-ecosystem.XXXXXX.cjs)
@@ -62,8 +71,8 @@ cat > "$ECOSYSTEM" <<EOF
 module.exports = {
   apps: [{
     name: '$APP_NAME',
-    script: '$APP_DIR/backend/dist/index.js',
-    cwd: '$APP_DIR/backend',
+    script: '$HELIO_SRC/backend/dist/index.js',
+    cwd: '$HELIO_SRC',
     env: {
       NODE_ENV: 'production',
       PORT: '$PORT',
