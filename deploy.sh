@@ -32,10 +32,8 @@ if ! command -v pm2 >/dev/null 2>&1; then
 fi
 
 # ── Step 1: Stop existing instance ───────────────────────────────────────────
-if pm2 list 2>/dev/null | grep -q "\b$APP_NAME\b"; then
-  log "Stopping existing instance..."
-  pm2 delete "$APP_NAME"
-fi
+log "Stopping existing instance (if running)..."
+pm2 delete "$APP_NAME" 2>/dev/null || true
 
 # ── Step 2: Pull or clone ─────────────────────────────────────────────────────
 if [ -d "$APP_DIR/.git" ]; then
