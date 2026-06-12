@@ -1,17 +1,52 @@
-# Helio — Self-hosted Uptime Monitoring
+# Helio — Self-hosted Uptime & Container Monitoring
 
-![Version](https://img.shields.io/badge/version-1.0.0-2EE0CE)
+![Version](https://img.shields.io/badge/version-2.0.0-2EE0CE)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-Helio ist eine moderne, selbst-gehostete Uptime-Monitoring-Alternative zu **Uptime Kuma** — mit Fokus auf eine saubere REST-API, erweiterbare Checker-Architektur, WebSocket-Live-Updates und ein Dark-First Dashboard. Ideal für Homelab-Betreiber, DevOps-Teams und Self-Hoster.
+Helio ist eine moderne, selbst-gehostete Monitoring-Plattform — Alternative zu **Uptime Kuma** und **Grafana** — mit Fokus auf saubere REST-API, erweiterbare Checker-Architektur, WebSocket-Live-Updates, **Proxmox Container-Monitoring** und ein Dark-First Dashboard. Ideal für Homelab-Betreiber, DevOps-Teams und Self-Hoster.
 
 ---
 
-## Screenshots
+## Features
 
-> Dashboard-Übersicht, Monitor-Detail, Latenz-Charts, Benachrichtigungen, Status-Pages, Metriken, Einstellungen
+### 📡 6 Uptime-Monitor-Typen
+| Typ | Beschreibung |
+|-----|-------------|
+| **HTTP(s)** | Status-Code-Range, Keyword, JSONPath, Redirects, Timeout, Basic Auth, Ignore-TLS |
+| **TCP-Port** | Host + Port, Connect-Timeout |
+| **Ping (ICMP)** | System-`ping`, Fallback TCP Echo |
+| **DNS** | A/AAAA/CNAME/MX/TXT, erwarteter Wert, eigener Resolver |
+| **SSL/TLS** | Zertifikats-Ablauf, Warning-Schwellwert → DEGRADED |
+| **Push (Heartbeat)** | Token-URL, Grace-Period |
+
+### 🐳 Proxmox Container-Monitoring
+- **Live-Polling** aller LXC-Container und QEMU-VMs via Proxmox VE API
+- **Metriken**: CPU, RAM, Disk, Netzwerk-I/O, Ping-Latenz
+- **Per-Container Charts** mit umschaltbaren Tabs (CPU/RAM/Disk/Netzwerk)
+- **Auto-Discovery**: Erkennt alle Container im Cluster
+- Self-Signed Cert Support, Poll-Intervall konfigurierbar
+
+### 📢 Benachrichtigungen (Provider-Pattern)
+Mehrere Benachrichtigungen pro Monitor zuweisbar: **Webhook**, **Telegram**, **Discord** (Embeds), **E-Mail (SMTP)**, **ntfy** — alle mit Test-Button.
+
+### 🔧 Monitoring-Engine
+- Scheduler-basiert (eigener Intervall pro Monitor, min 20s)
+- Status-Transitionen (UP→DOWN feuert Events → Notifications + WS-Broadcast)
+- Heartbeat-Retention (7d Rohdaten, dann stündliche Aggregation)
+- Graceful Shutdown
+
+### 🎨 Dashboard
+- **Übersicht** — Live-KPIs, Latenz-Chart, Alert-Feed, Monitor-Tabelle
+- **Monitor-Detail** — Latenz-Chart (Canvas), Uptime-%, Heartbeat-Tabelle, Pause/Resume/Edit/Delete
+- **Monitor-Formular** — Dynamisch je nach Typ, Editieren bestehender Monitore
+- **Container** — Proxmox-Dashboard mit CPU/RAM/Disk/Ping-Tabelle und Metric-Tabs
+- **Benachrichtigungen** — CRUD + Test + Edit, Monitor-Zuweisung
+- **Status-Pages** — Öffentliche Seiten ohne Auth, Monitor-Auswahl
+- **Metriken** — Uptime-Tabelle (24h/7d/30d)
+- **Einstellungen** — Profil, TOTP-2FA, API-Keys, Aufbewahrung
+- **Dark/Light-Mode** — Umschaltbar, persistiert
 
 ---
 
@@ -19,134 +54,58 @@ Helio ist eine moderne, selbst-gehostete Uptime-Monitoring-Alternative zu **Upti
 
 ```
 helio/
-├── shared/              # Gemeinsame TypeScript-Types
-│   └── src/types.ts     → Monitor, Heartbeat, Notification, User, ApiKey, …
+├── shared/              # TypeScript-Types (Monitor, Heartbeat, Notification, User…)
+│   └── src/types.ts
 │
-├── server/              # Express-API + Monitoring-Engine
+├── server/              # Express-API + Engine
 │   ├── src/
-│   │   ├── checkers/    → HTTP, TCP, Ping, DNS, SSL, Push (IChecker-Interface)
-│   │   ├── db/          → SQLite (better-sqlite3), 9 Migrationen, CRUD-Queries
-│   │   ├── engine/      → Scheduler (eigener Intervall pro Monitor), Engine, Aggregation
-│   │   ├── middleware/  → JWT-Auth, API-Key-Auth, Error-Handler
-│   │   ├── notifications/ → Webhook, Telegram, Discord, E-Mail (nodemailer), ntfy
-│   │   ├── routes/      → /api/v1/* — Auth, Monitore, Notifications, Status-Pages, …
-│   │   ├── ws/          → WebSocket-Server (Events: heartbeat:new, monitor:status-change)
-│   │   └── index.ts     → Server-Einstieg, Graceful Shutdown
-│   └── Dockerfile       → Multi-Stage Build
+│   │   ├── checkers/      → HTTP, TCP, Ping, DNS, SSL, Push
+│   │   ├── collectors/    → Proxmox-VE-API-Client
+│   │   ├── db/            → SQLite (better-sqlite3), 11 Migrationen, CRUD-Queries
+│   │   ├── engine/        → Scheduler, Engine, ContainerCollector, Aggregation
+│   │   ├── middleware/     → JWT-Auth, API-Key-Auth, Error-Handler
+│   │   ├── notifications/ → Webhook, Telegram, Discord, Email, ntfy
+│   │   ├── routes/        → /api/v1/* (Auth, Monitore, Container, Notifications, …)
+│   │   ├── utils/         → URL-Safety (SSRF-Schutz)
+│   │   ├── ws/            → WebSocket (heartbeat:new, monitor:status-change)
+│   │   └── index.ts       → Server-Einstieg, Graceful Shutdown
+│   └── Dockerfile
 │
 ├── client/              # React + Vite + TypeScript + TailwindCSS v4
 │   └── src/
-│       ├── api/         → Typisierte API-Clients (auth, monitors, notifications)
-│       ├── components/  → UI-Komponenten (Sidebar, Topbar, Overview, MonitorForm, …)
-│       ├── hooks/       → useWebSocket, useChartLiveUpdates
-│       ├── store/       → Zustand-Store (Auth, Theme, View-Routing, API-Data)
-│       └── utils/       → Canvas-Chart-Engine (retina-scharf, smooth paths)
+│       ├── api/          → Typisierte API-Clients
+│       ├── components/   → 20+ UI-Komponenten
+│       ├── hooks/        → useWebSocket, useChartLiveUpdates
+│       ├── store/        → Zustand (Auth, Theme, View-Routing, API-Data)
+│       └── utils/        → Canvas-Chart-Engine (retina)
 │
-├── docker-compose.yml   → Single-Service-Setup mit Volume
+├── docker-compose.yml
 ├── .env.example
 └── README.md
 ```
 
 ---
 
-## Features
-
-### 6 Monitor-Typen
-
-| Typ | Beschreibung |
-|-----|-------------|
-| **HTTP(s)** | Status-Code-Range (z.B. 200-299), Keyword-Check im Body, JSON-Path, Redirects, Timeout, Basic Auth, Ignore-TLS |
-| **TCP-Port** | Host + Port, Connect-Timeout |
-| **Ping (ICMP)** | System-`ping`-Befehl, Fallback auf TCP Echo |
-| **DNS** | Record-Typ (A, AAAA, CNAME, MX, TXT), erwarteter Wert, eigener Resolver |
-| **SSL/TLS** | Zertifikats-Ablauf, Warnschwellwert in Tagen → Status DEGRADED |
-| **Push (Heartbeat)** | Token-URL wird generiert, externer Dienst ruft `/api/push/:token` auf |
-
-Jeder Monitor läuft mit eigenem **konfigurierbaren Intervall** (min. 20s), **Retries**, **Tags** und **Status** (UP / DOWN / PENDING / PAUSED / DEGRADED).
-
-### Monitoring-Engine
-
-- **Scheduler-basiert** — kein Cron-Paket, eigener Interval-Manager pro Monitor
-- **Status-Transitionen** — bei UP→DOWN / DOWN→UP werden Events gefeuert
-- **Heartbeat-Retention** — Rohdaten 7 Tage, dann stündliche Aggregation (avg/min/max Latenz, Uptime-%)
-
-### Benachrichtigungen (Provider-Pattern)
-
-Mehrere Benachrichtigungen pro Monitor zuweisbar, mit Test-Button:
-
-- **Webhook** — POST mit JSON-Payload, custom Headers
-- **Telegram** — Bot-Token + Chat-ID
-- **Discord** — Webhook-URL, Embed-Format
-- **E-Mail (SMTP)** — nodemailer
-- **ntfy** — Topic + Server-URL
-
-### REST-API
-
-Vollständige REST-API unter `/api/v1`:
-
-| Bereich | Endpunkte |
-|---------|-----------|
-| **Auth** | POST register, login, refresh, 2FA-setup/verify/disable |
-| **Monitore** | CRUD, heartbeats, uptime, pause, resume |
-| **Benachrichtigungen** | CRUD, test |
-| **Status-Pages** | CRUD, öffentliche Route (Slug) |
-| **Wartungsfenster** | CRUD, aktive Abfrage |
-| **API-Keys** | Erstellen (einmalige Anzeige), Löschen, Scopes |
-| **Push** | `GET /api/push/:token` |
-
-### WebSocket
-
-- Events: `heartbeat:new`, `monitor:status-change`, `monitor:created/updated/deleted`
-- JWT-Auth beim Handshake
-- Client-Reconnect mit Backoff (1s, 2s, 4s, … max 30s)
-
-### Dashboard
-
-- **Übersicht** — Live-KPIs, Latenz-Chart, Alert-Feed, Monitor-Tabelle
-- **Monitor-Detail** — Latenz-Chart (Canvas), Uptime-%, Heartbeat-Historie, Pause/Resume/Delete
-- **Monitor-Formular** — dynamisches Formular je nach Typ (HTTP, TCP, Ping, DNS, SSL, Push)
-- **Benachrichtigungen** — Provider-Verwaltung mit Test-Button und Monitor-Zuweisung
-- **Status-Pages** — öffentliche Seite ohne Auth, Monitor-Auswahl
-- **Metriken** — Uptime-Tabelle (24h/7d/30d)
-- **Einstellungen** — Profil, 2FA (TOTP), API-Keys, Aufbewahrung
-- **Dark/Light-Mode** — umschaltbar, persistiert
-
----
-
 ## Quick Start
 
 ### Mit Docker
-
 ```bash
-# Repository klonen und starten
 git clone https://github.com/naix1337/helio-v2.git
 cd helio
-
-# Starten
 docker compose up -d
-
-# Dashboard: http://localhost:3001
-# API: http://localhost:3001/api/v1
+# http://localhost:3001
 ```
 
-### Ohne Docker (Entwicklung)
-
+### Ohne Docker
 ```bash
-# Abhängigkeiten installieren
 npm install
-
-# Mit Seed-Daten starten (Admin + Demo-Monitore)
-npm run seed
-
-# Server starten (mit auto-restart)
-npm run dev:server
-
-# Frontend starten (separates Terminal)
-npm run dev:client
+npm run seed              # Demo-Daten + Admin
+npm run dev:server        # → http://localhost:3001
+# Terminal 2:
+npm run dev:client        # → http://localhost:5173 (optional)
 ```
 
 ### Demo-Zugang
-
 ```
 E-Mail:    admin@helio.local
 Passwort:  admin123
@@ -159,11 +118,10 @@ Passwort:  admin123
 | Variable | Default | Beschreibung |
 |----------|---------|-------------|
 | `PORT` | `3001` | Server-Port |
-| `HOST` | `0.0.0.0` | Server-Host |
-| `DB_PATH` | `./helio.db` | Pfad zur SQLite-Datenbank |
-| `JWT_SECRET` | (random) | Secret für JWT-Tokens |
-| `CORS_ORIGIN` | `*` | CORS-Origin |
-| `RETENTION_RAW_DAYS` | `7` | Heartbeat-Aufbewahrung in Tagen |
+| `DB_PATH` | `./helio.db` | SQLite-Datenbank |
+| `JWT_SECRET` | (random) | JWT-Secret |
+| `CORS_ORIGIN` | `*` | CORS |
+| `RETENTION_RAW_DAYS` | `7` | Heartbeat-Aufbewahrung |
 | `NTFY_DEFAULT_SERVER` | `https://ntfy.sh` | Default ntfy-Server |
 
 ---
@@ -171,7 +129,6 @@ Passwort:  admin123
 ## API-Referenz
 
 ### Auth
-
 ```
 POST /api/v1/auth/register   { email, password }
 POST /api/v1/auth/login      { email, password }
@@ -182,12 +139,11 @@ GET  /api/v1/auth/me         (JWT)
 ```
 
 ### Monitore
-
 ```
 GET    /api/v1/monitors              (JWT/API-Key)
 POST   /api/v1/monitors              { name, type, config, intervalSeconds, tags }  (JWT)
 GET    /api/v1/monitors/:id          (JWT/API-Key)
-PATCH  /api/v1/monitors/:id          { name?, config?, intervalSeconds?, status? }  (JWT)
+PATCH  /api/v1/monitors/:id          { name?, config?, intervalSeconds?, … }  (JWT)
 DELETE /api/v1/monitors/:id          (JWT)
 POST   /api/v1/monitors/:id/pause    (JWT)
 POST   /api/v1/monitors/:id/resume   (JWT)
@@ -195,196 +151,75 @@ GET    /api/v1/monitors/:id/heartbeats?range=24h|7d|30d  (JWT/API-Key)
 GET    /api/v1/monitors/:id/uptime   (JWT/API-Key)
 ```
 
-**Config pro Monitor-Typ:**
-
-```json
-// HTTP
-{ "url": "https://example.com", "method": "GET", "statusCodeMin": 200, "statusCodeMax": 299 }
-
-// TCP
-{ "host": "localhost", "port": 6379, "timeoutMs": 5000 }
-
-// Ping
-{ "host": "8.8.8.8", "count": 2 }
-
-// DNS
-{ "host": "example.com", "recordType": "A", "expectedValue": "93.184.216.34" }
-
-// SSL
-{ "host": "example.com", "port": 443, "warningDays": 30 }
-
-// Push
-{ "graceSeconds": 300 }
+### Container (Proxmox)
+```
+GET    /api/v1/containers              — Aktuelle Metriken aller Container/VM
+GET    /api/v1/containers/:vmid/history — Metrik-Verlauf
+GET    /api/v1/containers/config       — Proxmox-Config (ohne Passwort)
+POST   /api/v1/containers/config       { host, user, password, intervalSeconds }
+POST   /api/v1/containers/test         { host, user, password } — Verbindung testen
+DELETE /api/v1/containers/config       — Config löschen + Polling stoppen
 ```
 
 ### Benachrichtigungen
-
 ```
-GET    /api/v1/notifications          (JWT)
-POST   /api/v1/notifications          { name, provider, config, monitorIds }
-PATCH  /api/v1/notifications/:id      { name?, config?, monitorIds? }
+GET    /api/v1/notifications           (JWT)
+POST   /api/v1/notifications           { name, provider, config, monitorIds }
+PATCH  /api/v1/notifications/:id       { name?, config?, monitorIds? }
 DELETE /api/v1/notifications/:id
-POST   /api/v1/notifications/:id/test (sendet Test-Benachrichtigung)
+POST   /api/v1/notifications/:id/test  (sendet Test)
 ```
 
 ### Status-Pages
-
 ```
 GET    /api/v1/status-pages                  (JWT)
 POST   /api/v1/status-pages                  { title, slug, monitorIds }
-PATCH  /api/v1/status-pages/:id              { title?, slug?, monitorIds?, incidentBanner? }
-DELETE /api/v1/status-pages/:id
 GET    /api/v1/status-pages/public/:slug     (öffentlich, kein Auth)
+DELETE /api/v1/status-pages/:id
 ```
 
 ### API-Keys
-
 ```
 GET    /api/v1/api-keys     (JWT)
 POST   /api/v1/api-keys     { name, scopes: ["read","write"] }
 DELETE /api/v1/api-keys/:id (JWT)
 ```
-
 Verwendung: `X-API-Key: pk_<Ihr-Key>` als Header.
-
-### Push-Endpunkt (öffentlich)
-
-```
-GET /api/push/:token
-```
-
-### Wartungsfenster
-
-```
-GET    /api/v1/maintenance        (JWT)
-POST   /api/v1/maintenance        { monitorIds, startsAt, endsAt, description }
-GET    /api/v1/maintenance/active (JWT)
-DELETE /api/v1/maintenance/:id    (JWT)
-```
 
 ---
 
-## Projekt-Setup (für Entwickler)
+## Container-Monitoring (Proxmox)
+
+### Konfiguration
+1. **Container → Konfiguration** in der Sidebar
+2. Host: `https://dein-proxmox:8006`
+3. User: `root@pam`
+4. Passwort + Poll-Intervall
+5. **"Speichern & verbinden"**
+
+### Anzeige
+- **KPI-Cards**: Container-Anzahl, CPU/RAM/Disk gesamt
+- **Container-Tabelle**: Name, VMID, Node, CPU/RAM/Disk Mini-Bars, Ping, Status
+- **Detail-Panel** (Klick auf Container): Metric-Tabs für CPU/RAM/Disk/Netzwerk mit Liniendiagramm
+
+---
+
+## Entwicklung
 
 ```bash
-# Repository
 git clone https://github.com/naix1337/helio-v2.git
 cd helio
-
-# Installieren (Workspaces: shared, server, client)
 npm install
-
-# Build (optional)
-npm run build:client
-
-# Seed-Daten
 npm run seed
-
-# Entwicklung (2 Terminals)
-npm run dev:server   # → http://localhost:3001
-npm run dev:client   # → http://localhost:5173
+npm run dev:server   # Terminal 1
+npm run dev:client   # Terminal 2 (optional)
 ```
 
 ### Docker Build
-
 ```bash
 docker compose build
 docker compose up -d
 ```
-
----
-
-## Was wurde gebaut? (Dokumentation)
-
-### Tag 1: Dashboard-Design
-
-Das Frontend wurde pixelgenau nach einem **Helio Dashboard HTML-Design** umgesetzt. Die Design-Datei lag als exportierter HTML-Prototyp vor (aus Claude Design) und wurde in ein produktionsreifes **React + TypeScript + Vite + TailwindCSS v4** Projekt überführt.
-
-**Umgesetzte Design-Elemente:**
-- **Dark-First Theme** mit vollständigem Light-Mode — Cyan-Primary (#2EE0CE), Violet-Accent (#9C8CFA)
-- **Sidebar** mit Logo, Navigation (3 Gruppen), Live-Badges, User-Footer
-- **Topbar** mit Time-Range-Segmented-Control, Notification-Bell, Theme-Toggle
-- **4 KPI-Cards** mit Canvas-Sparklines (retina-scharf)
-- **Main-Chart** — CPU + Netzwerk als gestapelte Flächenkurven auf Canvas, live-aktualisierend
-- **Alert-Feed**, **Nodes-Tabelle**, **Container-Grid**, **Alerts-Liste**
-- Responsive Layout (Sidebar → Burger-Menü auf Mobile)
-
-### Tag 2: Backend + API
-
-Das komplette Backend wurde als **Node.js + TypeScript + Express** App gebaut:
-
-**Datenbank (SQLite / better-sqlite3):**
-- 9 Migrationen für alle Entitäten
-- WAL-Mode, Foreign Keys
-- CRUD-Queries für User, Monitore, Heartbeats, Notifications, API-Keys, Status-Pages, Maintenance-Windows, Uptime-Aggregations
-
-**Checker-Engine:**
-- `IChecker`-Interface + Registry-Pattern → neue Checker brauchen nur eine Klasse + Register
-- **HttpChecker**: fetch-basiert, Status-Code-Range, Keyword, JSONPath, Basic Auth, Timeout, Ignore-TLS
-- **TcpChecker**: net.connect mit Timeout
-- **PingChecker**: System-ping + TCP-Echo-Fallback (Hinweis für CAP_NET_RAW)
-- **DnsChecker**: dns.promises, alle Record-Typen, custom Resolver
-- **SslChecker**: tls.connect, Zertifikats-Ablauf, DEGRADED-Status bei Unterschreitung
-- **PushChecker**: Token-basiert, Grace-Period
-
-**Monitoring-Engine:**
-- Scheduler: eigener setInterval pro Monitor, `startMonitor(id, interval, fn)`
-- Status-Transition-Detection (UP→DOWN feuert Events)
-- Notification-Dispatch bei Transitionen
-- Heartbeat-Aggregation (stündlich) + Pruning (7 Tage)
-- Graceful Shutdown (stoppt alle Intervalle, schließt DB)
-
-**Notification-Provider (5 Stück):**
-- WebhookProvider, TelegramProvider, DiscordProvider, EmailProvider (nodemailer), NtfyProvider
-- Einheitliches `INotificationProvider`-Interface
-- Test-Funktion pro Provider
-- SSRF-Schutz (URL-Validierung gegen Private-IPs)
-
-**REST-API (30+ Endpunkte unter /api/v1):**
-- Auth (Register, Login, Refresh, 2FA/TOTP)
-- Monitor-CRUD + Heartbeats + Uptime + Pause/Resume
-- Notification-CRUD + Test
-- Status-Pages (CRUD + öffentliche Route)
-- Maintenance-Windows
-- API-Keys (mit Scopes)
-- Push-Endpunkt
-
-**WebSocket:**
-- JWT-Auth beim Handshake
-- Events: heartbeat:new, monitor:status-change
-- Broadcast an alle authentifizierten Clients
-
-### Tag 3: Frontend-Produktivschaltung + Rebranding
-
-**Login + Auth:**
-- Login/Register-Seite mit JWT-Token-Management
-- Auto-Refresh bei 401
-- Protected Routes
-
-**API-Integration:**
-- Alle Views laden echte Daten von der API (keine Mock-Daten mehr)
-- Loading/Error-States
-
-**Monitor-Formular:**
-- Dynamisches Formular je nach Typ (HTTP: URL/Methode/Keyword, TCP: Host/Port, Ping: Host, DNS: Host/Record-Typ, SSL: Host/Port/Tage, Push: Grace)
-- Live-Erstellung über API
-
-**Monitor-Detail:**
-- Latenz-Chart mit Zeitachsen-Labels
-- Uptime-Cards (24h/7d/365d)
-- Heartbeat-Tabelle
-- Pause/Resume/Delete
-
-**Weitere Views:**
-- Benachrichtigungen (CRUD + Test + Edit)
-- Status-Pages (Erstellen + öffentliche URL)
-- Metriken (Uptime-Übersicht pro Monitor)
-- Einstellungen (Profil, 2FA, API-Keys, Aufbewahrung)
-- Team-Ansicht
-
-**Rebranding:**
-- "Pulse" → "Helio"
-- "prod" → "dev build"
 
 ---
 
