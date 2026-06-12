@@ -22,7 +22,7 @@ function MiniBar({ pct, color, label }: { pct: number; color: string; label: str
   const colorMap: Record<string, string> = { primary: 'var(--color-primary)', ok: 'var(--color-ok)', warn: 'var(--color-warn)', down: 'var(--color-down)' };
   return (
     <div className="flex items-center gap-2">
-      <span className="font-mono text-[0.82rem] tabular-nums w-[45px]" style={{ color: 'var(--color-text)' }}>{label}</span>
+      <span className="font-mono text-[0.82rem] tabular-nums w-[55px]" style={{ color: 'var(--color-text)' }}>{label}</span>
       <div className="w-[70px] h-[6px] rounded-full overflow-hidden" style={{ background: 'var(--color-surface-3)' }}>
         <div className="h-full rounded-full transition-all" style={{ width: `${Math.min(pct, 100)}%`, background: colorMap[color] || color }} />
       </div>
@@ -81,7 +81,7 @@ export default function ContainerDashboard() {
     let maxVal = 100;
 
     if (metricTab === 'cpu') {
-      data = history.map((h) => Math.round(h.cpu * 100));
+      data = history.map((h) => parseFloat((h.cpu * 100).toFixed(2)));
       color = getCSSVar('--color-primary');
     } else if (metricTab === 'ram') {
       data = history.map((h) => h.maxmem > 0 ? Math.round((h.mem / h.maxmem) * 100) : 0);
@@ -121,7 +121,7 @@ export default function ContainerDashboard() {
     // Last point dot
     const lastX = w - pad; const lastY = h - pad - (data[data.length - 1]! / maxVal) * pH;
     ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
-  }, [history, metricTab]);
+  }, [history, metricTab, selected?.vmid]);
 
   const saveConfig = async () => {
     const res = await apiRequest('POST', '/containers/config', { host: cfgHost, user: cfgUser, password: cfgPass, intervalSeconds: cfgInterval });
@@ -208,7 +208,7 @@ export default function ContainerDashboard() {
                     CT {selected.vmid} · {selected.node} · {selected.type.toUpperCase()}
                   </span>
                 </div>
-                <button onClick={() => setSelected(null)} className="text-[0.8rem] bg-none border-none cursor-pointer" style={{ color: 'var(--color-text-dim)' }}>✕</button>
+                <button onClick={() => { setSelected(null); setHistory([]); }} className="text-[0.8rem] bg-none border-none cursor-pointer" style={{ color: 'var(--color-text-dim)' }}>✕</button>
               </div>
 
               {/* Metric tabs */}
@@ -262,7 +262,7 @@ export default function ContainerDashboard() {
               </thead>
               <tbody>
                 {containers.map((c) => {
-                  const cpuPct = Math.round(c.cpu * 100);
+                  const cpuPct = parseFloat((c.cpu * 100).toFixed(1));
                   const memPct = c.maxmem > 0 ? Math.round((c.mem / c.maxmem) * 100) : 0;
                   const diskPct = c.maxdisk > 0 ? Math.round((c.disk / c.maxdisk) * 100) : 0;
                   const isRunning = c.status === 'running';
@@ -277,7 +277,7 @@ export default function ContainerDashboard() {
                       </td>
                       <td className="px-3 py-[11px] border-b font-mono max-md:hidden" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>{c.vmid}</td>
                       <td className="px-3 py-[11px] border-b font-mono max-md:hidden" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>{c.node}</td>
-                      <td className="px-3 py-[11px] border-b" style={{ borderColor: 'var(--color-border)' }}><MiniBar pct={cpuPct} color={cpuPct > 80 ? 'warn' : 'primary'} label={`${cpuPct}%`} /></td>
+                      <td className="px-3 py-[11px] border-b" style={{ borderColor: 'var(--color-border)' }}><MiniBar pct={cpuPct} color={cpuPct > 80 ? 'warn' : 'primary'} label={`${cpuPct.toFixed(1)}%`} /></td>
                       <td className="px-3 py-[11px] border-b" style={{ borderColor: 'var(--color-border)' }}><MiniBar pct={memPct} color={memPct > 80 ? 'warn' : 'primary'} label={`${memPct}%`} /></td>
                       <td className="px-3 py-[11px] border-b max-md:hidden" style={{ borderColor: 'var(--color-border)' }}><MiniBar pct={diskPct} color={diskPct > 80 ? 'down' : diskPct > 50 ? 'warn' : 'primary'} label={`${diskPct}%`} /></td>
                       <td className="px-3 py-[11px] border-b font-mono" style={{ borderColor: 'var(--color-border)', color: c.pingMs !== null ? (c.pingMs < 0 ? 'var(--color-down)' : 'var(--color-text)') : 'var(--color-text-dim)' }}>
