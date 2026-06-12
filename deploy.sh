@@ -40,17 +40,14 @@ if [ -d "$APP_DIR/.git" ]; then
   log "Pulling latest code from GitHub..."
   git -C "$APP_DIR" fetch origin main
   git -C "$APP_DIR" reset --hard origin/main
-  # Update submodule (helio-app/)
-  git -C "$APP_DIR" submodule update --init
 else
   log "Cloning repository to $APP_DIR..."
   git clone --branch main --single-branch "$REPO_URL" "$APP_DIR"
-  git -C "$APP_DIR" submodule update --init
 fi
 
 # Ensure helio-app exists post-clone
 if [ ! -d "$HELIO_SRC" ]; then
-  die "helio-app/ directory not found after clone. Check submodule setup."
+  die "helio-app/ directory not found after clone."
 fi
 
 # ── Step 3: Install & build (workspace is in helio-app/) ──────────────────────

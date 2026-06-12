@@ -5,4 +5,5 @@ dist/
 .env.*
 !.env.example
 .worktrees/
+.claude/worktrees/
 .superpowers/
