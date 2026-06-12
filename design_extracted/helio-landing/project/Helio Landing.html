@@ -9,6 +9,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;480;500;540;600;650;680&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="styles.css" />
+<template id="__bundler_thumbnail" data-bg-color="#0B0E14">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0B0E14"/>
+    <circle cx="600" cy="330" r="120" fill="none" stroke="#2EE0CE" stroke-width="20"/>
+    <path d="M600 210 a120 120 0 0 1 85 35" fill="none" stroke="#0B0E14" stroke-width="34" stroke-linecap="round"/>
+    <circle cx="600" cy="330" r="34" fill="#2EE0CE"/>
+    <text x="600" y="560" font-family="Inter, sans-serif" font-size="86" font-weight="700" fill="#EEF2F7" text-anchor="middle" letter-spacing="-3">Helio</text>
+    <text x="600" y="620" font-family="monospace" font-size="28" fill="#9AA6B6" text-anchor="middle" letter-spacing="2">self-hosted monitoring</text>
+  </svg>
+</template>
 </head>
 <body>
 
@@ -499,9 +509,14 @@
 
 <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
 <script>
-  window.addEventListener("DOMContentLoaded", function () {
-    if (window.lucide) lucide.createIcons({ attrs: { "stroke-width": 1.75 } });
-  });
+  (function () {
+    function initIcons() { if (window.lucide) lucide.createIcons({ attrs: { "stroke-width": 1.75 } }); }
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initIcons);
+    } else {
+      initIcons();
+    }
+  })();
 </script>
 <script src="app.js"></script>
 

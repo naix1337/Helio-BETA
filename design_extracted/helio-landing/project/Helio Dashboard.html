@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="de" data-theme="dark">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Übersicht — Helio Dashboard</title>
+<meta name="description" content="Helio Monitoring-Dashboard — Echtzeit-Übersicht über Nodes, Container und Alerts." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;480;500;540;600;650;680&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="dashboard.css" />
+</head>
+<body class="app">
+
+<div class="mobile-backdrop" data-side-close></div>
+
+<!-- ===================== SIDEBAR ===================== -->
+<aside class="aside" id="aside">
+  <div class="aside-top">
+    <a href="Helio Landing.html" class="brand" aria-label="Helio"><span class="brand-mark" aria-hidden="true"></span>Helio</a>
+    <span class="env-pill">prod</span>
+  </div>
+  <div class="aside-search">
+    <i data-lucide="search"></i>
+    <input type="search" placeholder="Suchen…" aria-label="Suchen" />
+  </div>
+  <nav class="anav" aria-label="Dashboard-Navigation">
+    <div class="anav-group">
+      <span class="gl">Monitoring</span>
+      <button class="anav-item active" data-view="overview"><i data-lucide="layout-dashboard"></i>Übersicht</button>
+      <button class="anav-item" data-view="nodes"><i data-lucide="server"></i>Nodes<span class="count">12</span></button>
+      <button class="anav-item" data-view="containers"><i data-lucide="container"></i>Container<span class="count">14</span></button>
+      <button class="anav-item" data-view="alerts"><i data-lucide="bell"></i>Alerts<span class="count down">3</span></button>
+    </div>
+    <div class="anav-group">
+      <span class="gl">Transparenz</span>
+      <button class="anav-item" data-view="status"><i data-lucide="globe"></i>Status-Page</button>
+      <button class="anav-item" data-view="metrics"><i data-lucide="line-chart"></i>Metriken</button>
+    </div>
+    <div class="anav-group">
+      <span class="gl">System</span>
+      <button class="anav-item" data-view="team"><i data-lucide="users"></i>Team</button>
+      <button class="anav-item" data-view="settings"><i data-lucide="settings"></i>Einstellungen</button>
+    </div>
+  </nav>
+  <div class="aside-foot">
+    <div class="user-row">
+      <span class="avatar">MK</span>
+      <span class="u-meta">
+        <span class="u-name">Mara Kessler</span>
+        <span class="u-sub">admin@helio</span>
+      </span>
+      <span class="u-cog"><i data-lucide="chevrons-up-down"></i></span>
+    </div>
+  </div>
+</aside>
+
+<!-- ===================== MAIN ===================== -->
+<div class="main">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <button class="mburger" aria-label="Navigation öffnen"><i data-lucide="menu"></i></button>
+    <div class="page-title">
+      <h1 id="pageTitle">Übersicht</h1>
+      <span class="crumb" id="pageCrumb">prod · alle Regionen</span>
+    </div>
+    <div class="topbar-spacer"></div>
+    <span class="live-tag"><span class="s-dot ok"></span>live</span>
+    <div class="topbar-actions">
+      <div class="seg" id="rangeSeg" role="group" aria-label="Zeitraum">
+        <button data-range="1h">1<span class="lbl-hide">h</span></button>
+        <button data-range="6h">6<span class="lbl-hide">h</span></button>
+        <button data-range="24h" class="active">24<span class="lbl-hide">h</span></button>
+        <button data-range="7d">7<span class="lbl-hide">d</span></button>
+      </div>
+      <button class="icon-btn" aria-label="Benachrichtigungen"><i data-lucide="bell"></i><span class="ndot"></span></button>
+      <button class="icon-btn" data-theme-toggle aria-label="Farbschema wechseln">
+        <i data-lucide="moon" class="icon-moon"></i><i data-lucide="sun" class="icon-sun"></i>
+      </button>
+      <button class="btn btn-primary btn-sm"><i data-lucide="plus"></i>Node</button>
+    </div>
+  </header>
+
+  <!-- ===================== VIEW: ÜBERSICHT ===================== -->
+  <section class="content active" id="view-overview">
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="kpi-top">
+          <span class="kl"><span class="ki"><i data-lucide="server"></i></span>Nodes online</span>
+          <span class="trend up">+1</span>
+        </div>
+        <div class="kv">11<small> / 12</small></div>
+        <canvas class="kspark" data-spark="nodes" data-color="primary"></canvas>
+      </div>
+      <div class="kpi">
+        <div class="kpi-top">
+          <span class="kl"><span class="ki"><i data-lucide="cpu"></i></span>Ø CPU</span>
+          <span class="trend down">−4,2%</span>
+        </div>
+        <div class="kv" data-readout="cpu">37<small>%</small></div>
+        <canvas class="kspark" data-spark="cpu" data-color="primary"></canvas>
+      </div>
+      <div class="kpi v">
+        <div class="kpi-top">
+          <span class="kl"><span class="ki"><i data-lucide="memory-stick"></i></span>Ø RAM</span>
+          <span class="trend flat">±0%</span>
+        </div>
+        <div class="kv" data-readout="ram">61<small>%</small></div>
+        <canvas class="kspark" data-spark="ram" data-color="violet"></canvas>
+      </div>
+      <div class="kpi">
+        <div class="kpi-top">
+          <span class="kl"><span class="ki"><i data-lucide="activity"></i></span>Uptime 30T</span>
+          <span class="trend up">99,98%</span>
+        </div>
+        <div class="kv">99,98<small>%</small></div>
+        <canvas class="kspark" data-spark="uptime" data-color="primary"></canvas>
+      </div>
+    </div>
+
+    <div class="over-grid">
+      <!-- Main chart -->
+      <div class="panel-c">
+        <div class="pc-head">
+          <div>
+            <h3>Auslastung</h3>
+            <div class="pc-sub" id="chartSub">CPU &amp; Netzwerk · letzte 24 h</div>
+          </div>
+          <div class="legend">
+            <span><i class="l-cpu"></i>CPU %</span>
+            <span><i class="l-net"></i>Netz MB/s</span>
+          </div>
+        </div>
+        <div class="pc-body">
+          <div class="chart-wrap"><canvas id="mainChart"></canvas></div>
+          <div class="chart-foot">
+            <div><div class="cf-l">CPU jetzt</div><div class="cf-v" data-readout="cpu2">37,4 %</div></div>
+            <div><div class="cf-l">Netz Peak</div><div class="cf-v">128 MB/s</div></div>
+            <div><div class="cf-l">Antwortzeit</div><div class="cf-v ok" data-jitter2="24">24 ms</div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alerts feed -->
+      <div class="panel-c">
+        <div class="pc-head">
+          <div><h3>Aktuelle Alerts</h3><div class="pc-sub">3 aktiv · 1 kritisch</div></div>
+          <span class="badge"><span class="dot dot-down"></span>live</span>
+        </div>
+        <div class="feed">
+          <div class="feed-item down">
+            <span class="fi-ico"><i data-lucide="alert-octagon"></i></span>
+            <div class="fi-main"><div class="fi-t">cache-02 antwortet nicht</div><div class="fi-d">HTTP 503 · 3× fehlgeschlagen</div></div>
+            <span class="fi-time">2 min</span>
+          </div>
+          <div class="feed-item warn">
+            <span class="fi-ico"><i data-lucide="alert-triangle"></i></span>
+            <div class="fi-main"><div class="fi-t">web-01 CPU &gt; 85 %</div><div class="fi-d">Schwellwert seit 4 min</div></div>
+            <span class="fi-time">6 min</span>
+          </div>
+          <div class="feed-item warn">
+            <span class="fi-ico"><i data-lucide="alert-triangle"></i></span>
+            <div class="fi-main"><div class="fi-t">db-primary Disk 78 %</div><div class="fi-d">Warnschwelle erreicht</div></div>
+            <span class="fi-time">22 min</span>
+          </div>
+          <div class="feed-item ok">
+            <span class="fi-ico"><i data-lucide="check"></i></span>
+            <div class="fi-main"><div class="fi-t">worker-eu-1 wiederhergestellt</div><div class="fi-d">Latenz wieder normal</div></div>
+            <span class="fi-time">38 min</span>
+          </div>
+          <div class="feed-item info">
+            <span class="fi-ico"><i data-lucide="git-commit-horizontal"></i></span>
+            <div class="fi-main"><div class="fi-t">Deploy abgeschlossen</div><div class="fi-d">api v2.8.1 · 4 Nodes</div></div>
+            <span class="fi-time">1 Std</span>
+          </div>
+        </div>
+        <div class="pc-foot"><a href="#" data-goto="alerts">Alle Alerts ansehen<i data-lucide="arrow-right"></i></a></div>
+      </div>
+    </div>
+
+    <!-- Nodes table -->
+    <div class="row-head" style="margin-top:30px">
+      <h2>Nodes</h2>
+      <span class="rh-sub">11 online · 1 mit Latenz</span>
+    </div>
+    <div class="table-wrap">
+      <table class="dtable" id="nodeTableOverview">
+        <thead>
+          <tr>
+            <th>Node</th>
+            <th class="col-hide">Region</th>
+            <th>CPU</th>
+            <th class="col-hide">RAM</th>
+            <th class="col-hide">Verlauf</th>
+            <th class="right">Latenz</th>
+            <th class="right">Status</th>
+          </tr>
+        </thead>
+        <tbody><!-- gefüllt via JS --></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== VIEW: NODES ===================== -->
+  <section class="content" id="view-nodes">
+    <div class="row-head">
+      <h2>Alle Nodes</h2>
+      <span class="rh-sub" id="nodesSub">12 Nodes · 4 Regionen</span>
+    </div>
+    <div class="table-wrap">
+      <table class="dtable" id="nodeTableFull">
+        <thead>
+          <tr>
+            <th>Node</th>
+            <th class="col-hide">Region</th>
+            <th>CPU</th>
+            <th>RAM</th>
+            <th class="col-hide">Disk</th>
+            <th class="col-hide">Verlauf</th>
+            <th class="right">Latenz</th>
+            <th class="right">Status</th>
+          </tr>
+        </thead>
+        <tbody><!-- gefüllt via JS --></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== VIEW: CONTAINER ===================== -->
+  <section class="content" id="view-containers">
+    <div class="row-head">
+      <h2>Container</h2>
+      <span class="rh-sub">14 laufend · Auto-Discovery aktiv</span>
+    </div>
+    <div class="cgrid" id="containerGrid"><!-- gefüllt via JS --></div>
+  </section>
+
+  <!-- ===================== VIEW: ALERTS ===================== -->
+  <section class="content" id="view-alerts">
+    <div class="row-head">
+      <h2>Alerts</h2>
+      <span class="rh-sub">3 aktiv · 2 heute gelöst</span>
+    </div>
+    <div class="alert-rows">
+      <div class="arow down">
+        <span class="a-ico"><i data-lucide="alert-octagon"></i></span>
+        <div><div class="a-t">cache-02 antwortet nicht</div><div class="a-d">HTTP 503 · 3 Versuche fehlgeschlagen · fra-1</div></div>
+        <span class="a-meta">vor 2 min</span>
+        <span class="badge badge-status down">kritisch</span>
+      </div>
+      <div class="arow warn">
+        <span class="a-ico"><i data-lucide="alert-triangle"></i></span>
+        <div><div class="a-t">web-01 CPU über Schwellwert</div><div class="a-d">CPU &gt; 85 % seit 4 min · ams-1</div></div>
+        <span class="a-meta">vor 6 min</span>
+        <span class="badge badge-status warn">warnung</span>
+      </div>
+      <div class="arow warn">
+        <span class="a-ico"><i data-lucide="alert-triangle"></i></span>
+        <div><div class="a-t">db-primary Disk-Auslastung 78 %</div><div class="a-d">Warnschwelle erreicht · fra-1</div></div>
+        <span class="a-meta">vor 22 min</span>
+        <span class="badge badge-status warn">warnung</span>
+      </div>
+      <div class="arow ok">
+        <span class="a-ico"><i data-lucide="check"></i></span>
+        <div><div class="a-t">worker-eu-1 wiederhergestellt</div><div class="a-d">Latenz wieder im Normalbereich · ams-1</div></div>
+        <span class="a-meta">vor 38 min</span>
+        <span class="badge badge-status ok">gelöst</span>
+      </div>
+      <div class="arow ok">
+        <span class="a-ico"><i data-lucide="check"></i></span>
+        <div><div class="a-t">cdn-edge-3 wieder erreichbar</div><div class="a-d">Health-Check erfolgreich · sfo-1</div></div>
+        <span class="a-meta">vor 2 Std</span>
+        <span class="badge badge-status ok">gelöst</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== VIEW: PLACEHOLDER (status/metrics/team/settings) ===================== -->
+  <section class="content" id="view-status">
+    <div class="row-head"><h2>Status-Page</h2><span class="rh-sub">öffentlich · status.helio.sh</span></div>
+    <div class="panel-c"><div class="pc-body" style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+      <i data-lucide="globe" style="width:32px;height:32px;margin:0 auto 14px;color:var(--primary)"></i>
+      <p style="color:var(--text-muted)">Öffentliche Status-Page-Konfiguration. Diese Demo-Ansicht ist ein Platzhalter.</p>
+    </div></div>
+  </section>
+  <section class="content" id="view-metrics">
+    <div class="row-head"><h2>Metriken</h2><span class="rh-sub">2,4 M Datenpunkte / min</span></div>
+    <div class="panel-c"><div class="pc-body" style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+      <i data-lucide="line-chart" style="width:32px;height:32px;margin:0 auto 14px;color:var(--primary)"></i>
+      <p style="color:var(--text-muted)">Detaillierter Metrik-Explorer. Diese Demo-Ansicht ist ein Platzhalter.</p>
+    </div></div>
+  </section>
+  <section class="content" id="view-team">
+    <div class="row-head"><h2>Team</h2><span class="rh-sub">4 Mitglieder</span></div>
+    <div class="panel-c"><div class="pc-body" style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+      <i data-lucide="users" style="width:32px;height:32px;margin:0 auto 14px;color:var(--primary)"></i>
+      <p style="color:var(--text-muted)">Team- und Rollenverwaltung. Diese Demo-Ansicht ist ein Platzhalter.</p>
+    </div></div>
+  </section>
+  <section class="content" id="view-settings">
+    <div class="row-head"><h2>Einstellungen</h2><span class="rh-sub">Instanz-Konfiguration</span></div>
+    <div class="panel-c"><div class="pc-body" style="text-align:center;padding:60px 20px;color:var(--text-dim)">
+      <i data-lucide="settings" style="width:32px;height:32px;margin:0 auto 14px;color:var(--primary)"></i>
+      <p style="color:var(--text-muted)">Allgemeine Einstellungen. Diese Demo-Ansicht ist ein Platzhalter.</p>
+    </div></div>
+  </section>
+
+</div>
+
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+<script>
+  (function () {
+    function initIcons() { if (window.lucide) lucide.createIcons({ attrs: { "stroke-width": 1.75 } }); }
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initIcons);
+    else initIcons();
+    window.__helioIcons = initIcons;
+  })();
+</script>
+<script src="dashboard.js"></script>
+
+</body>
+</html>

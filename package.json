@@ -1,13 +1,17 @@
 {
   "name": "helio",
+  "version": "1.0.0",
   "private": true,
-  "workspaces": ["backend", "frontend"],
+  "workspaces": [
+    "shared",
+    "server",
+    "client"
+  ],
   "scripts": {
-    "dev": "concurrently \"npm run dev -w backend\" \"npm run dev -w frontend\"",
-    "build": "npm run build -w frontend && npm run build -w backend",
-    "start": "NODE_ENV=production node backend/dist/index.js"
-  },
-  "devDependencies": {
-    "concurrently": "^8.2.2"
+    "dev:server": "npm run dev -w server",
+    "dev:client": "npm run dev -w client",
+    "build:server": "npm run build -w server",
+    "build:client": "npm run build -w client",
+    "seed": "npm run seed -w server"
   }
 }

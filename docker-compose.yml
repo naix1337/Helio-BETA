@@ -1,22 +1,30 @@
-version: '3.8'
+version: "3.9"
 
 services:
-  helio:
+  pulse:
     build:
-      context: ./helio-app
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: server/Dockerfile
+    working_dir: /app/server
     ports:
       - "3001:3001"
     volumes:
-      - helio-data:/app/data
-      - ./helio-app/backend/src:/app/backend/src
-      - ./helio-app/frontend/src:/app/frontend/src
+      - pulse-data:/app/data
     environment:
-      - NODE_ENV=development
       - PORT=3001
-      - HELIO_DB_PATH=/app/data/helio.db
-    command: npm run dev
+      - HOST=0.0.0.0
+      - DB_PATH=/app/data/pulse.db
+      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
+      - CORS_ORIGIN=*
+      - RETENTION_RAW_DAYS=7
+      - NTFY_DEFAULT_SERVER=https://ntfy.sh
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
 volumes:
-  helio-data:
+  pulse-data:

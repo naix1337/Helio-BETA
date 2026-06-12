@@ -1,235 +1,393 @@
-# Helio — Self-Hosted Server Monitoring
+# Helio — Self-hosted Uptime Monitoring
 
-> Lightweight, open-source server monitoring with a real-time React dashboard. Runs as a single Node.js process — no cloud, no subscription, full control.
+![Version](https://img.shields.io/badge/version-1.0.0-2EE0CE)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6)
+![React](https://img.shields.io/badge/React-19-61DAFB)
+![License](https://img.shields.io/badge/license-MIT-green)
+
+Helio ist eine moderne, selbst-gehostete Uptime-Monitoring-Alternative zu **Uptime Kuma** — mit Fokus auf eine saubere REST-API, erweiterbare Checker-Architektur, WebSocket-Live-Updates und ein Dark-First Dashboard. Ideal für Homelab-Betreiber, DevOps-Teams und Self-Hoster.
+
+---
 
 ## Screenshots
 
-| Dark Mode | Light Mode |
-|-----------|------------|
-| ![Dark](https://placehold.co/580x340/0B0E14/2EE0CE?text=Dashboard+Dark) | ![Light](https://placehold.co/580x340/FBFCFE/0C9C8D?text=Dashboard+Light) |
+> Dashboard-Übersicht, Monitor-Detail, Latenz-Charts, Benachrichtigungen, Status-Pages, Metriken, Einstellungen
 
-## Features
+---
 
-### Monitoring
-- **Live metrics** — CPU, RAM, disk, network updated every 5 seconds
-- **Docker monitoring** — container CPU/RAM/status (gracefully skipped if Docker isn't running)
-- **Proxmox auto-discovery** — automatic detection of LXC containers and QEMU VMs via Proxmox VE API, created as Helio Agents with live metrics
-- **Ping monitoring** — ICMP, TCP, and HTTP(S) health checks with configurable intervals and 24h uptime stats
-- **Distributed agents** — lightweight agent package for remote hosts reporting via WebSocket with token authentication
-- **Configurable alerts** — threshold rules with webhook, Slack, or Discord notifications + cooldown
-- **24-hour history** — SQLite ring buffer (17,280 rows ≈ 24 h at 5 s intervals, WAL mode)
-- **WebSocket streaming** — real-time push with automatic exponential-backoff reconnect
-
-### Management
-- **Role-based access** — JWT authentication with admin / editor / viewer roles
-- **Team management** — multi-user support with role assignment
-- **Agent management** — API tokens, agent registration, live metrics per node
-- **Node CRUD** — register and monitor servers with status tracking
-- **Settings page** — configurable app title, status page, dashboard visibility
-
-### UI
-- **Dark / light mode** — CSS custom properties, persisted via `localStorage`, zero flash on load
-- **Single process** — Express serves the compiled React app on port 3001 in production
-
-## Tech Stack
-
-| | |
-|---|---|
-| **Backend** | Node 20 · TypeScript · Express 4 · ws · better-sqlite3 · systeminformation · dockerode |
-| **Frontend** | React 18 · Vite 5 · TypeScript · Zustand · Recharts · Lucide · React Router 6 |
-| **Auth** | JWT (jsonwebtoken) · bcrypt · role-based middleware |
-| **Agents** | WebSocket-based distributed monitoring · token authentication · standalone agent package |
-| **Ping** | Native ICMP (node-ping) · TCP sockets · HTTP(S) probes |
-| **Proxmox** | Proxmox VE REST API integration · API token auth · auto-discovery |
-| **Encryption** | AES-256-GCM for sensitive token storage |
-| **Tests** | Vitest — unit tests for DB queries, collectors, and alert engine |
-
-## Quick Start
-
-### Prerequisites
-
-- **Node.js 20+** (Node v26 breaks `better-sqlite3` native addon)
-- **Visual Studio Build Tools** with "Desktop development with C++" (needed by `better-sqlite3` on Windows)
-  ```
-  winget install Microsoft.VisualStudio.2022.BuildTools
-  ```
-- On Linux: `build-essential` and `python3`
-
-### Local Run
-
-```bash
-git clone https://github.com/naix1337/helio.git
-cd helio/helio-app
-npm install
-npm run build
-NODE_ENV=production npm start
-# → http://localhost:3001
-```
-
-### Development (hot reload)
-
-```bash
-cd helio/helio-app
-npm run dev
-# Backend  → http://localhost:3001  (tsx watch)
-# Frontend → http://localhost:5173  (Vite + API proxy)
-```
-
-### Linux Production Deployment (PM2)
-
-Ein automatisches Deploy-Script ist enthalten:
-
-```bash
-# Auf dem Linux-Server:
-git clone https://github.com/naix1337/helio.git
-cd helio
-chmod +x deploy.sh
-
-# Standard-Pfad: /opt/helio
-./deploy.sh
-
-# Oder mit benutzerdefiniertem Pfad:
-HELIO_DIR=/var/www/helio ./deploy.sh
-```
-
-Das Script:
-1. Klont das Repo in den Zielordner
-2. Installiert Abhängigkeiten (`npm install`)
-3. Baut Backend + Frontend
-4. Startet die App via PM2 (mit Auto-Restart)
-5. Überschreibt existierende Installationen sauber
-
-### Agent Package (Remote Monitoring)
-
-Für entfernte Server, die nicht direkt vom Helio-Backend erreichbar sind:
-
-```bash
-cd helio/agent
-npm install
-npm run build
-
-# Start mit Verbindung zum Helio-Server:
-HELIO_WS_URL=ws://helio-server:3001/ws/agent \
-HELIO_AGENT_TOKEN=dein-agent-token \
-npm start
-```
-
-Der Agent sendet CPU, RAM, Disk, Network und Docker-Metriken per WebSocket an den Helio-Server. Das Token wird im Helio-Dashboard unter **Agents → Agent hinzufügen** generiert.
-
-### Proxmox Auto-Discovery
-
-1. Im Proxmox VE unter `Datacenter → Permissions → API Tokens` einen Token erstellen
-2. Im Helio-Dashboard auf der **Nodes-Seite** auf "Proxmox-Verbindung hinzufügen" klicken
-3. Host, Port (8006), API Token ID und Secret eingeben
-4. Scan-Intervall konfigurieren (20s – 3600s)
-5. Fertig! Alle LXC-Container und QEMU-VMs werden automatisch als Agents angelegt
-
-## Project Structure
+## Architektur
 
 ```
 helio/
-├── backend/src/
-│   ├── types.ts              # Shared interfaces (source of truth)
-│   ├── crypto.ts              # AES-256-GCM encryption for secrets
-│   ├── db/                    # SQLite connection, schema, queries
-│   │   ├── migrations/        # 001_initial .. 006_proxmox
-│   │   ├── connection.ts
-│   │   ├── queries.ts
-│   │   └── runner.ts
-│   ├── collectors/
-│   │   ├── systemCollector.ts  # CPU/RAM/disk/network every 5 s
-│   │   ├── dockerCollector.ts  # Docker container stats
-│   │   ├── pingCollector.ts    # ICMP/TCP/HTTP ping probes
-│   │   └── proxmoxCollector.ts # Proxmox LXC/QEMU auto-discovery
-│   ├── middleware/
-│   │   └── auth.ts            # JWT + role-based guards
-│   ├── ws/
-│   │   ├── metricsWs.ts       # Browser WebSocket server + heartbeat
-│   │   └── agentWs.ts         # Agent WebSocket (token auth, metrics)
-│   ├── routes/
-│   │   ├── auth.ts             # Login, setup, JWT
-│   │   ├── metrics.ts          # System metrics
-│   │   ├── alerts.ts           # Alert CRUD
-│   │   ├── nodes.ts            # Node CRUD
-│   │   ├── agents.ts           # Agent CRUD + tokens
-│   │   ├── ping.ts             # Ping targets + results
-│   │   ├── proxmox.ts          # Proxmox connections + scan
-│   │   ├── team.ts             # User management
-│   │   ├── settings.ts         # App settings
-│   │   └── status.ts           # Public status page data
-│   ├── alertEngine.ts          # Rule evaluation + webhook dispatch
-│   └── index.ts                # Express bootstrap + collector loop
-├── agent/                      # Standalone agent package (npm)
-│   └── src/                    # collector, reporter, config, types
-├── frontend/src/
-│   ├── styles/                 # CSS tokens (design system) + layout
-│   ├── hooks/                  # useWebSocket, useMetrics, useAuth
-│   ├── store/                  # Zustand stores (metrics, agents, ping, proxmox)
-│   ├── components/             # StatCard, Sidebar, Modals, Tables
-│   ├── pages/                  # Dashboard, Nodes, Agents, Ping, Proxmox, Alerts
-│   └── App.tsx                 # React Router 6 layout
-└── deploy.sh                   # Linux PM2 deployment script
+├── shared/              # Gemeinsame TypeScript-Types
+│   └── src/types.ts     → Monitor, Heartbeat, Notification, User, ApiKey, …
+│
+├── server/              # Express-API + Monitoring-Engine
+│   ├── src/
+│   │   ├── checkers/    → HTTP, TCP, Ping, DNS, SSL, Push (IChecker-Interface)
+│   │   ├── db/          → SQLite (better-sqlite3), 9 Migrationen, CRUD-Queries
+│   │   ├── engine/      → Scheduler (eigener Intervall pro Monitor), Engine, Aggregation
+│   │   ├── middleware/  → JWT-Auth, API-Key-Auth, Error-Handler
+│   │   ├── notifications/ → Webhook, Telegram, Discord, E-Mail (nodemailer), ntfy
+│   │   ├── routes/      → /api/v1/* — Auth, Monitore, Notifications, Status-Pages, …
+│   │   ├── ws/          → WebSocket-Server (Events: heartbeat:new, monitor:status-change)
+│   │   └── index.ts     → Server-Einstieg, Graceful Shutdown
+│   └── Dockerfile       → Multi-Stage Build
+│
+├── client/              # React + Vite + TypeScript + TailwindCSS v4
+│   └── src/
+│       ├── api/         → Typisierte API-Clients (auth, monitors, notifications)
+│       ├── components/  → UI-Komponenten (Sidebar, Topbar, Overview, MonitorForm, …)
+│       ├── hooks/       → useWebSocket, useChartLiveUpdates
+│       ├── store/       → Zustand-Store (Auth, Theme, View-Routing, API-Data)
+│       └── utils/       → Canvas-Chart-Engine (retina-scharf, smooth paths)
+│
+├── docker-compose.yml   → Single-Service-Setup mit Volume
+├── .env.example
+└── README.md
 ```
 
-## API
+---
 
-| Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
-| `GET` | `/api/auth/setup` | — | Check if setup is needed |
-| `POST` | `/api/auth/setup` | — | Create admin account |
-| `POST` | `/api/auth/login` | — | Login, receive JWT |
-| `GET` | `/api/me` | JWT | Current user info |
-| | | | |
-| `GET` | `/api/metrics/current` | JWT | Live system snapshot |
-| `GET` | `/api/metrics/history?range=1h\|6h\|24h` | JWT | Historical metrics (≤ 500 points) |
-| | | | |
-| `GET` | `/api/alerts` | JWT | All alert rules |
-| `POST` | `/api/alerts` | JWT | Create rule |
-| `PUT` | `/api/alerts/:id` | JWT | Enable / disable rule |
-| `DELETE` | `/api/alerts/:id` | JWT | Delete rule |
-| | | | |
-| `GET` | `/api/nodes` | JWT | Registered nodes |
-| | | | |
-| `GET` | `/api/agents` | JWT | All agents with latest metrics |
-| `GET` | `/api/agents/:id` | JWT | Agent detail |
-| `GET` | `/api/agents/:id/metrics/current` | JWT | Latest agent metrics |
-| `GET` | `/api/agents/:id/metrics/history` | JWT | Agent metric history |
-| `PUT` | `/api/agents/:id` | Admin | Update agent name/tags |
-| `DELETE` | `/api/agents/:id` | Admin | Delete agent |
-| `POST` | `/api/agents/tokens` | Admin | Generate agent token |
-| `DELETE` | `/api/agents/tokens/:id` | Admin | Revoke agent token |
-| | | | |
-| `GET/POST` | `/api/ping` | JWT | Ping targets CRUD |
-| `POST` | `/api/ping/:id/probe` | JWT | Manual ping probe |
-| | | | |
-| `GET` | `/api/proxmox` | Admin | Proxmox connections |
-| `POST` | `/api/proxmox` | Admin | Add Proxmox connection |
-| `PUT` | `/api/proxmox/:id` | Admin | Update connection |
-| `DELETE` | `/api/proxmox/:id` | Admin | Delete connection |
-| `POST` | `/api/proxmox/:id/test` | Admin | Test Proxmox API connectivity |
-| `POST` | `/api/proxmox/:id/scan` | Admin | Trigger manual resource scan |
-| `GET` | `/api/proxmox/:id/resources` | Admin | Discovered LXC/QEMU resources |
-| | | | |
-| `GET` | `/api/team` | Admin | List users |
-| `PUT` | `/api/team/:id/role` | Admin | Update user role |
-| `DELETE` | `/api/team/:id` | Admin | Remove user |
-| | | | |
-| `GET/PUT` | `/api/settings` | JWT | App settings |
-| `GET` | `/api/status` | — | Public status page data |
-| `WS` | `/ws` | JWT | Live metrics stream |
-| `WS` | `/ws/agent` | Token | Agent metrics stream |
+## Features
 
-## Environment Variables
+### 6 Monitor-Typen
 
-| Variable | Default | Description |
+| Typ | Beschreibung |
+|-----|-------------|
+| **HTTP(s)** | Status-Code-Range (z.B. 200-299), Keyword-Check im Body, JSON-Path, Redirects, Timeout, Basic Auth, Ignore-TLS |
+| **TCP-Port** | Host + Port, Connect-Timeout |
+| **Ping (ICMP)** | System-`ping`-Befehl, Fallback auf TCP Echo |
+| **DNS** | Record-Typ (A, AAAA, CNAME, MX, TXT), erwarteter Wert, eigener Resolver |
+| **SSL/TLS** | Zertifikats-Ablauf, Warnschwellwert in Tagen → Status DEGRADED |
+| **Push (Heartbeat)** | Token-URL wird generiert, externer Dienst ruft `/api/push/:token` auf |
+
+Jeder Monitor läuft mit eigenem **konfigurierbaren Intervall** (min. 20s), **Retries**, **Tags** und **Status** (UP / DOWN / PENDING / PAUSED / DEGRADED).
+
+### Monitoring-Engine
+
+- **Scheduler-basiert** — kein Cron-Paket, eigener Interval-Manager pro Monitor
+- **Status-Transitionen** — bei UP→DOWN / DOWN→UP werden Events gefeuert
+- **Heartbeat-Retention** — Rohdaten 7 Tage, dann stündliche Aggregation (avg/min/max Latenz, Uptime-%)
+
+### Benachrichtigungen (Provider-Pattern)
+
+Mehrere Benachrichtigungen pro Monitor zuweisbar, mit Test-Button:
+
+- **Webhook** — POST mit JSON-Payload, custom Headers
+- **Telegram** — Bot-Token + Chat-ID
+- **Discord** — Webhook-URL, Embed-Format
+- **E-Mail (SMTP)** — nodemailer
+- **ntfy** — Topic + Server-URL
+
+### REST-API
+
+Vollständige REST-API unter `/api/v1`:
+
+| Bereich | Endpunkte |
+|---------|-----------|
+| **Auth** | POST register, login, refresh, 2FA-setup/verify/disable |
+| **Monitore** | CRUD, heartbeats, uptime, pause, resume |
+| **Benachrichtigungen** | CRUD, test |
+| **Status-Pages** | CRUD, öffentliche Route (Slug) |
+| **Wartungsfenster** | CRUD, aktive Abfrage |
+| **API-Keys** | Erstellen (einmalige Anzeige), Löschen, Scopes |
+| **Push** | `GET /api/push/:token` |
+
+### WebSocket
+
+- Events: `heartbeat:new`, `monitor:status-change`, `monitor:created/updated/deleted`
+- JWT-Auth beim Handshake
+- Client-Reconnect mit Backoff (1s, 2s, 4s, … max 30s)
+
+### Dashboard
+
+- **Übersicht** — Live-KPIs, Latenz-Chart, Alert-Feed, Monitor-Tabelle
+- **Monitor-Detail** — Latenz-Chart (Canvas), Uptime-%, Heartbeat-Historie, Pause/Resume/Delete
+- **Monitor-Formular** — dynamisches Formular je nach Typ (HTTP, TCP, Ping, DNS, SSL, Push)
+- **Benachrichtigungen** — Provider-Verwaltung mit Test-Button und Monitor-Zuweisung
+- **Status-Pages** — öffentliche Seite ohne Auth, Monitor-Auswahl
+- **Metriken** — Uptime-Tabelle (24h/7d/30d)
+- **Einstellungen** — Profil, 2FA (TOTP), API-Keys, Aufbewahrung
+- **Dark/Light-Mode** — umschaltbar, persistiert
+
+---
+
+## Quick Start
+
+### Mit Docker
+
+```bash
+# Repository klonen und starten
+git clone https://github.com/naix1337/helio-v2.git
+cd helio
+
+# Starten
+docker compose up -d
+
+# Dashboard: http://localhost:3001
+# API: http://localhost:3001/api/v1
+```
+
+### Ohne Docker (Entwicklung)
+
+```bash
+# Abhängigkeiten installieren
+npm install
+
+# Mit Seed-Daten starten (Admin + Demo-Monitore)
+npm run seed
+
+# Server starten (mit auto-restart)
+npm run dev:server
+
+# Frontend starten (separates Terminal)
+npm run dev:client
+```
+
+### Demo-Zugang
+
+```
+E-Mail:    admin@helio.local
+Passwort:  admin123
+```
+
+---
+
+## Umgebungsvariablen
+
+| Variable | Default | Beschreibung |
 |----------|---------|-------------|
-| `PORT` | `3001` | HTTP server port |
-| `NODE_ENV` | — | Set to `production` to serve frontend build and lock CORS |
-| `HELIO_DB_PATH` | `./helio.db` | SQLite database path |
-| `JWT_SECRET` | auto-generated | JWT signing key (set for persistence across restarts) |
-| `HELIO_AGENT_TOKENS` | — | Comma-separated agent tokens (alternative to DB tokens) |
-| `HELIO_ENCRYPTION_KEY` | derived from DB path | AES-256-GCM key for encrypted Proxmox API tokens (32 bytes hex) |
-| `HELIO_DIR` | `/opt/helio` | Installationspfad (nur für `deploy.sh`) |
-## License
+| `PORT` | `3001` | Server-Port |
+| `HOST` | `0.0.0.0` | Server-Host |
+| `DB_PATH` | `./helio.db` | Pfad zur SQLite-Datenbank |
+| `JWT_SECRET` | (random) | Secret für JWT-Tokens |
+| `CORS_ORIGIN` | `*` | CORS-Origin |
+| `RETENTION_RAW_DAYS` | `7` | Heartbeat-Aufbewahrung in Tagen |
+| `NTFY_DEFAULT_SERVER` | `https://ntfy.sh` | Default ntfy-Server |
 
-MIT
+---
+
+## API-Referenz
+
+### Auth
+
+```
+POST /api/v1/auth/register   { email, password }
+POST /api/v1/auth/login      { email, password }
+POST /api/v1/auth/refresh    { refreshToken }
+POST /api/v1/auth/2fa/setup  (JWT)
+POST /api/v1/auth/2fa/verify { token }  (JWT)
+GET  /api/v1/auth/me         (JWT)
+```
+
+### Monitore
+
+```
+GET    /api/v1/monitors              (JWT/API-Key)
+POST   /api/v1/monitors              { name, type, config, intervalSeconds, tags }  (JWT)
+GET    /api/v1/monitors/:id          (JWT/API-Key)
+PATCH  /api/v1/monitors/:id          { name?, config?, intervalSeconds?, status? }  (JWT)
+DELETE /api/v1/monitors/:id          (JWT)
+POST   /api/v1/monitors/:id/pause    (JWT)
+POST   /api/v1/monitors/:id/resume   (JWT)
+GET    /api/v1/monitors/:id/heartbeats?range=24h|7d|30d  (JWT/API-Key)
+GET    /api/v1/monitors/:id/uptime   (JWT/API-Key)
+```
+
+**Config pro Monitor-Typ:**
+
+```json
+// HTTP
+{ "url": "https://example.com", "method": "GET", "statusCodeMin": 200, "statusCodeMax": 299 }
+
+// TCP
+{ "host": "localhost", "port": 6379, "timeoutMs": 5000 }
+
+// Ping
+{ "host": "8.8.8.8", "count": 2 }
+
+// DNS
+{ "host": "example.com", "recordType": "A", "expectedValue": "93.184.216.34" }
+
+// SSL
+{ "host": "example.com", "port": 443, "warningDays": 30 }
+
+// Push
+{ "graceSeconds": 300 }
+```
+
+### Benachrichtigungen
+
+```
+GET    /api/v1/notifications          (JWT)
+POST   /api/v1/notifications          { name, provider, config, monitorIds }
+PATCH  /api/v1/notifications/:id      { name?, config?, monitorIds? }
+DELETE /api/v1/notifications/:id
+POST   /api/v1/notifications/:id/test (sendet Test-Benachrichtigung)
+```
+
+### Status-Pages
+
+```
+GET    /api/v1/status-pages                  (JWT)
+POST   /api/v1/status-pages                  { title, slug, monitorIds }
+PATCH  /api/v1/status-pages/:id              { title?, slug?, monitorIds?, incidentBanner? }
+DELETE /api/v1/status-pages/:id
+GET    /api/v1/status-pages/public/:slug     (öffentlich, kein Auth)
+```
+
+### API-Keys
+
+```
+GET    /api/v1/api-keys     (JWT)
+POST   /api/v1/api-keys     { name, scopes: ["read","write"] }
+DELETE /api/v1/api-keys/:id (JWT)
+```
+
+Verwendung: `X-API-Key: pk_<Ihr-Key>` als Header.
+
+### Push-Endpunkt (öffentlich)
+
+```
+GET /api/push/:token
+```
+
+### Wartungsfenster
+
+```
+GET    /api/v1/maintenance        (JWT)
+POST   /api/v1/maintenance        { monitorIds, startsAt, endsAt, description }
+GET    /api/v1/maintenance/active (JWT)
+DELETE /api/v1/maintenance/:id    (JWT)
+```
+
+---
+
+## Projekt-Setup (für Entwickler)
+
+```bash
+# Repository
+git clone https://github.com/naix1337/helio-v2.git
+cd helio
+
+# Installieren (Workspaces: shared, server, client)
+npm install
+
+# Build (optional)
+npm run build:client
+
+# Seed-Daten
+npm run seed
+
+# Entwicklung (2 Terminals)
+npm run dev:server   # → http://localhost:3001
+npm run dev:client   # → http://localhost:5173
+```
+
+### Docker Build
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+---
+
+## Was wurde gebaut? (Dokumentation)
+
+### Tag 1: Dashboard-Design
+
+Das Frontend wurde pixelgenau nach einem **Helio Dashboard HTML-Design** umgesetzt. Die Design-Datei lag als exportierter HTML-Prototyp vor (aus Claude Design) und wurde in ein produktionsreifes **React + TypeScript + Vite + TailwindCSS v4** Projekt überführt.
+
+**Umgesetzte Design-Elemente:**
+- **Dark-First Theme** mit vollständigem Light-Mode — Cyan-Primary (#2EE0CE), Violet-Accent (#9C8CFA)
+- **Sidebar** mit Logo, Navigation (3 Gruppen), Live-Badges, User-Footer
+- **Topbar** mit Time-Range-Segmented-Control, Notification-Bell, Theme-Toggle
+- **4 KPI-Cards** mit Canvas-Sparklines (retina-scharf)
+- **Main-Chart** — CPU + Netzwerk als gestapelte Flächenkurven auf Canvas, live-aktualisierend
+- **Alert-Feed**, **Nodes-Tabelle**, **Container-Grid**, **Alerts-Liste**
+- Responsive Layout (Sidebar → Burger-Menü auf Mobile)
+
+### Tag 2: Backend + API
+
+Das komplette Backend wurde als **Node.js + TypeScript + Express** App gebaut:
+
+**Datenbank (SQLite / better-sqlite3):**
+- 9 Migrationen für alle Entitäten
+- WAL-Mode, Foreign Keys
+- CRUD-Queries für User, Monitore, Heartbeats, Notifications, API-Keys, Status-Pages, Maintenance-Windows, Uptime-Aggregations
+
+**Checker-Engine:**
+- `IChecker`-Interface + Registry-Pattern → neue Checker brauchen nur eine Klasse + Register
+- **HttpChecker**: fetch-basiert, Status-Code-Range, Keyword, JSONPath, Basic Auth, Timeout, Ignore-TLS
+- **TcpChecker**: net.connect mit Timeout
+- **PingChecker**: System-ping + TCP-Echo-Fallback (Hinweis für CAP_NET_RAW)
+- **DnsChecker**: dns.promises, alle Record-Typen, custom Resolver
+- **SslChecker**: tls.connect, Zertifikats-Ablauf, DEGRADED-Status bei Unterschreitung
+- **PushChecker**: Token-basiert, Grace-Period
+
+**Monitoring-Engine:**
+- Scheduler: eigener setInterval pro Monitor, `startMonitor(id, interval, fn)`
+- Status-Transition-Detection (UP→DOWN feuert Events)
+- Notification-Dispatch bei Transitionen
+- Heartbeat-Aggregation (stündlich) + Pruning (7 Tage)
+- Graceful Shutdown (stoppt alle Intervalle, schließt DB)
+
+**Notification-Provider (5 Stück):**
+- WebhookProvider, TelegramProvider, DiscordProvider, EmailProvider (nodemailer), NtfyProvider
+- Einheitliches `INotificationProvider`-Interface
+- Test-Funktion pro Provider
+- SSRF-Schutz (URL-Validierung gegen Private-IPs)
+
+**REST-API (30+ Endpunkte unter /api/v1):**
+- Auth (Register, Login, Refresh, 2FA/TOTP)
+- Monitor-CRUD + Heartbeats + Uptime + Pause/Resume
+- Notification-CRUD + Test
+- Status-Pages (CRUD + öffentliche Route)
+- Maintenance-Windows
+- API-Keys (mit Scopes)
+- Push-Endpunkt
+
+**WebSocket:**
+- JWT-Auth beim Handshake
+- Events: heartbeat:new, monitor:status-change
+- Broadcast an alle authentifizierten Clients
+
+### Tag 3: Frontend-Produktivschaltung + Rebranding
+
+**Login + Auth:**
+- Login/Register-Seite mit JWT-Token-Management
+- Auto-Refresh bei 401
+- Protected Routes
+
+**API-Integration:**
+- Alle Views laden echte Daten von der API (keine Mock-Daten mehr)
+- Loading/Error-States
+
+**Monitor-Formular:**
+- Dynamisches Formular je nach Typ (HTTP: URL/Methode/Keyword, TCP: Host/Port, Ping: Host, DNS: Host/Record-Typ, SSL: Host/Port/Tage, Push: Grace)
+- Live-Erstellung über API
+
+**Monitor-Detail:**
+- Latenz-Chart mit Zeitachsen-Labels
+- Uptime-Cards (24h/7d/365d)
+- Heartbeat-Tabelle
+- Pause/Resume/Delete
+
+**Weitere Views:**
+- Benachrichtigungen (CRUD + Test + Edit)
+- Status-Pages (Erstellen + öffentliche URL)
+- Metriken (Uptime-Übersicht pro Monitor)
+- Einstellungen (Profil, 2FA, API-Keys, Aufbewahrung)
+- Team-Ansicht
+
+**Rebranding:**
+- "Pulse" → "Helio"
+- "prod" → "dev build"
+
+---
+
+## Lizenz
+
+MIT — gebaut mit ❤️ für die Self-Hoster-Community.

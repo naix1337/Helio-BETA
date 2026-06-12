@@ -1,9 +1,7 @@
 node_modules/
 dist/
-*.local
+*.db
+*.db-wal
+*.db-shm
 .env
-.env.*
-!.env.example
-.worktrees/
-.claude/worktrees/
-.superpowers/
+.env.local
