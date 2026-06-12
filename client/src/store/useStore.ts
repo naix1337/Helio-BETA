@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import type { ViewName } from '../data/mockData';
 import * as authApi from '../api/auth';
 import * as monitorsApi from '../api/monitors';
 import * as notificationsApi from '../api/notifications';
@@ -73,6 +72,8 @@ function makeSeries(n: number) {
   return { cpu, net };
 }
 
+export type ViewName = 'overview' | 'nodes' | 'containers' | 'alerts' | 'status' | 'metrics' | 'team' | 'settings';
+
 /* ---------- State ---------- */
 
 interface ChartSeries { cpu: number[]; net: number[] }
@@ -122,6 +123,12 @@ interface AppState {
   notifications: Notification[];
   notificationsLoading: boolean;
   fetchNotifications: () => Promise<void>;
+
+  // Monitor form modal
+  showMonitorForm: boolean;
+  setShowMonitorForm: (v: boolean) => void;
+  editMonitorId: string | null;
+  setEditMonitor: (id: string | null) => void;
 }
 
 function getInitialTheme(): 'dark' | 'light' {
@@ -205,7 +212,7 @@ export const useStore = create<AppState>((set, get) => ({
   sidebarOpen: false,
   setSidebarOpen: (o) => set({ sidebarOpen: o }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-  timeRange: '24h',
+  timeRange: '24',
   setTimeRange: (r) => set({ timeRange: r }),
 
   /* ---------- Chart ---------- */
@@ -245,4 +252,9 @@ export const useStore = create<AppState>((set, get) => ({
       set({ notificationsLoading: false });
     }
   },
+
+  showMonitorForm: false,
+  setShowMonitorForm: (v) => set({ showMonitorForm: v, editMonitorId: null }),
+  editMonitorId: null,
+  setEditMonitor: (id) => set({ editMonitorId: id, showMonitorForm: true }),
 }));

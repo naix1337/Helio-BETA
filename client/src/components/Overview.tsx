@@ -56,9 +56,10 @@ export default function Overview() {
           icon={<Activity className="w-[15px] h-[15px]" />}
           label="Ø Uptime (24h)"
           trend={{ value: 'letzte 24h', type: 'flat' }}
-          value={<>—<small className="text-[0.9rem] text-[var(--color-text-dim)] font-normal">%</small></>}
+          value={<>{monitors.length > 0 ? Math.round(monitors.filter(m => m.status === 'UP').length / monitors.length * 100) : 0}<small className="text-[0.9rem] text-[var(--color-text-dim)] font-normal">%</small></>}
           sparkColor="--color-violet"
-          sparkSeed={19}
+          sparkSeed={0}
+          noSpark
           isViolet
         />
         <KpiCard

@@ -5,14 +5,15 @@ const VIEW_TITLES: Record<string, [string, string]> = {
   overview: ['Übersicht', 'prod · alle Regionen'],
   nodes: ['Monitore', 'Übersicht aller Monitore'],
   alerts: ['Alerts', 'Aktive Warnungen und Vorfälle'],
-  containers: ['Benachrichtigungen', 'Provider und Einstellungen'],
+  containers: ['Container', 'Proxmox Container/VM Metriken'],
   status: ['Status-Page', 'Öffentliche Status-Seiten'],
   metrics: ['Metriken', 'Uptime- und Leistungsdaten'],
   team: ['Team', 'Mitglieder und Rollen'],
   settings: ['Einstellungen', 'System-Konfiguration'],
 };
 
-const RANGES = ['1h', '6h', '24h', '7d'] as const;
+const RANGE_VALS = ['1', '6', '24', '7d'] as const;
+const RANGE_LABELS: Record<string, string> = { '1': '1h', '6': '6h', '24': '24h', '7d': '7d' };
 
 export default function Topbar() {
   const currentView = useStore((s) => s.currentView);
@@ -21,6 +22,8 @@ export default function Topbar() {
   const toggleSidebar = useStore((s) => s.toggleSidebar);
   const timeRange = useStore((s) => s.timeRange);
   const setTimeRange = useStore((s) => s.setTimeRange);
+  const setView = useStore((s) => s.setView);
+  const setShowMonitorForm = useStore((s) => s.setShowMonitorForm);
 
   const [title, subtitle] = VIEW_TITLES[currentView] || ['Helio', 'Monitoring'];
 
@@ -60,7 +63,7 @@ export default function Topbar() {
       <div className="flex items-center gap-2">
         {/* Time range segmented */}
         <div className="inline-flex border border-[var(--color-border)] rounded-[9px] overflow-hidden bg-[var(--color-surface-2)] max-[600px]:hidden">
-          {RANGES.map((r) => (
+          {RANGE_VALS.map((r) => (
             <button
               key={r}
               onClick={() => setTimeRange(r)}
@@ -70,14 +73,17 @@ export default function Topbar() {
                   : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
               }`}
             >
-              {r}
-              <span className="max-md:hidden">h</span>
+              {r === '7d' ? '7d' : `${r}h`}
             </button>
           ))}
         </div>
 
-        {/* Notification bell */}
-        <button className="relative w-[38px] h-[38px] rounded-[9px] border border-[var(--color-border)] bg-transparent text-[var(--color-text-muted)] cursor-pointer grid place-items-center hover:text-[var(--color-text)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)] transition-all duration-150" aria-label="Benachrichtigungen">
+        {/* Notification bell — navigiert zu Alerts */}
+        <button
+          onClick={() => setView('alerts')}
+          className="relative w-[38px] h-[38px] rounded-[9px] border border-[var(--color-border)] bg-transparent text-[var(--color-text-muted)] cursor-pointer grid place-items-center hover:text-[var(--color-text)] hover:border-[var(--color-border-strong)] hover:bg-[var(--color-surface-2)] transition-all duration-150"
+          aria-label="Benachrichtigungen"
+        >
           <Bell className="w-[18px] h-[18px]" />
           <span className="absolute top-[8px] right-[9px] w-[7px] h-[7px] rounded-full bg-[var(--color-down)]" style={{ boxShadow: '0 0 0 2px var(--color-bg)' }} />
         </button>
@@ -91,8 +97,11 @@ export default function Topbar() {
           {theme === 'dark' ? <Moon className="w-[18px] h-[18px]" /> : <Sun className="w-[18px] h-[18px]" />}
         </button>
 
-        {/* +Node button */}
-        <button className="btn-primary max-sm:hidden">
+        {/* +Node button — öffnet MonitorForm */}
+        <button
+          onClick={() => setShowMonitorForm(true)}
+          className="btn-primary max-sm:hidden"
+        >
           <Plus className="w-[18px] h-[18px]" />
           Node
         </button>

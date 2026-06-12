@@ -11,9 +11,11 @@ interface KpiCardProps {
   sparkSeed: number;
   sparkClamp?: { min: number; max: number };
   isViolet?: boolean;
+  noSpark?: boolean;
+  isViolet?: boolean;
 }
 
-export default function KpiCard({ icon, label, trend, value, sparkColor, sparkSeed, sparkClamp, isViolet }: KpiCardProps) {
+export default function KpiCard({ icon, label, trend, value, sparkColor, sparkSeed = 0, sparkClamp, isViolet, noSpark }: KpiCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -24,7 +26,7 @@ export default function KpiCard({ icon, label, trend, value, sparkColor, sparkSe
     const onResize = () => setTimeout(draw, 50);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [sparkColor, sparkSeed, sparkClamp]);
+  }, [sparkColor, sparkSeed, sparkClamp, noSpark]);
 
   const trendClass =
     trend.type === 'up' ? 'text-[var(--color-ok)] bg-[var(--color-ok-soft)]' :
@@ -47,7 +49,7 @@ export default function KpiCard({ icon, label, trend, value, sparkColor, sparkSe
       <div className="font-mono text-[2rem] font-[650] tracking-tight mt-[14px] leading-none">
         {value}
       </div>
-      <canvas ref={canvasRef} className="mt-[12px] h-[40px] w-full block" />
+      {!noSpark && <canvas ref={canvasRef} className="mt-[12px] h-[40px] w-full block" />}
     </div>
   );
 }

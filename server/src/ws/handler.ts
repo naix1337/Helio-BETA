@@ -87,7 +87,9 @@ export function broadcast<T>(event: WsEvent<T>): void {
   if (!wss) return;
   const message = JSON.stringify(event);
   wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
+    const ws = client as AuthenticatedClient;
+    // Only send to authenticated clients (unauthenticated = public status page visitors)
+    if (client.readyState === WebSocket.OPEN && ws.userId) {
       client.send(message);
     }
   });

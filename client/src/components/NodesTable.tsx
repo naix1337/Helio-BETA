@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useStore, type Monitor } from '../store/useStore';
 import { drawRowSpark } from '../utils/chart';
 import * as monitorsApi from '../api/monitors';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Edit3 } from 'lucide-react';
 
 interface NodesTableProps {
   title?: string;
@@ -73,6 +73,7 @@ export default function NodesTable({ title, subtitle, full }: NodesTableProps) {
 function Row({ monitor, index, full, onDelete }: { monitor: Monitor; index: number; full?: boolean; onDelete: (id: string, name: string) => void }) {
   const sparkRef = useRef<HTMLCanvasElement>(null);
   const setDetailMonitor = useStore((s) => s.setDetailMonitor);
+  const setEditMonitor = useStore((s) => s.setEditMonitor);
 
   useEffect(() => {
     const canvas = sparkRef.current;
@@ -114,14 +115,24 @@ function Row({ monitor, index, full, onDelete }: { monitor: Monitor; index: numb
       </td>
       <td className="px-4 py-[13px] border-b text-right" style={{ borderColor: 'var(--color-border)' }} dangerouslySetInnerHTML={{ __html: statusBadge(monitor.status) }} />
       <td className="px-2 py-[13px] border-b text-center" style={{ borderColor: 'var(--color-border)' }}>
-        <button
-          onClick={(e) => { e.stopPropagation(); onDelete(monitor.id, monitor.name); }}
-          className="w-[30px] h-[30px] rounded-[6px] grid place-items-center border cursor-pointer hover:bg-[var(--color-down-soft)]"
-          style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-dim)', background: 'transparent' }}
-          title="Löschen"
-        >
-          <Trash2 className="w-[13px] h-[13px]" />
-        </button>
+        <div className="flex gap-1">
+            <button
+              onClick={(e) => { e.stopPropagation(); setEditMonitor(monitor.id); }}
+              className="w-[30px] h-[30px] rounded-[6px] grid place-items-center border cursor-pointer hover:bg-[var(--color-surface-2)]"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-dim)', background: 'transparent' }}
+              title="Bearbeiten"
+            >
+              <Edit3 className="w-[13px] h-[13px]" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(monitor.id, monitor.name); }}
+              className="w-[30px] h-[30px] rounded-[6px] grid place-items-center border cursor-pointer hover:bg-[var(--color-down-soft)]"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-dim)', background: 'transparent' }}
+              title="Löschen"
+            >
+              <Trash2 className="w-[13px] h-[13px]" />
+            </button>
+          </div>
       </td>
     </tr>
   );

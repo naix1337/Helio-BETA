@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import { useStore } from './store/useStore';
-import { useChartLiveUpdates } from './hooks/useChartLiveUpdates';
 import { useWebSocket } from './hooks/useWebSocket';
 import Sidebar from './components/Sidebar';
 import Topbar from './components/Topbar';
@@ -13,6 +12,8 @@ import StatusPageView from './components/StatusPageView';
 import MetricsView from './components/MetricsView';
 import SettingsView from './components/SettingsView';
 import TeamView from './components/TeamView';
+import MonitorForm from './components/MonitorForm';
+import ContainerDashboard from './components/ContainerDashboard';
 import LoginPage from './components/LoginPage';
 
 function App() {
@@ -22,8 +23,12 @@ function App() {
   const checkAuth = useStore((s) => s.checkAuth);
   const user = useStore((s) => s.user);
   const detailMonitorId = useStore((s) => s.detailMonitorId);
+  const showMonitorForm = useStore((s) => s.showMonitorForm);
+  const editMonitorId = useStore((s) => s.editMonitorId);
+  const setShowMonitorForm = useStore((s) => s.setShowMonitorForm);
+  const fetchMonitors = useStore((s) => s.fetchMonitors);
 
-  useChartLiveUpdates();
+
   useWebSocket();
 
   useEffect(() => {
@@ -53,7 +58,7 @@ function App() {
     switch (currentView) {
       case 'overview': return <Overview />;
       case 'nodes': return <NodesView />;
-      case 'containers': return <NotificationsView />;
+      case 'containers': return <ContainerDashboard />;
       case 'alerts': return <AlertsView />;
       case 'status': return <StatusPageView />;
       case 'metrics': return <MetricsView />;
@@ -66,6 +71,7 @@ function App() {
   return (
     <div className="app-shell">
       <Sidebar />
+      {showMonitorForm && <MonitorForm editId={editMonitorId || undefined} onClose={() => { setShowMonitorForm(false); fetchMonitors(); }} />}
       <main className="main-col">
         <Topbar />
         <div className="flex-1" style={{ padding: 'clamp(18px, 3vw, 28px)' }}>

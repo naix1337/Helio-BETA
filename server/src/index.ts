@@ -23,6 +23,8 @@ import statusPageRoutes from './routes/statusPages.js';
 import maintenanceRoutes from './routes/maintenance.js';
 import apiKeyRoutes from './routes/apiKeys.js';
 import settingsRoutes from './routes/settings.js';
+import containerRoutes from './routes/containers.js';
+import { startContainerPolling } from './engine/ContainerCollector.js';
 
 const app = express();
 const server = createServer(app);
@@ -62,6 +64,7 @@ app.use('/api/v1/status-pages', statusPageRoutes);
 app.use('/api/v1/maintenance', maintenanceRoutes);
 app.use('/api/v1/api-keys', apiKeyRoutes);
 app.use('/api/v1/settings', settingsRoutes);
+app.use('/api/v1/containers', containerRoutes);
 
 /* ---------- Push endpoint (public) ---------- */
 app.get('/api/push/:token', (req, res) => {
@@ -90,6 +93,7 @@ function start(): void {
 
   // Start monitoring engine
   startEngine();
+  startContainerPolling();
 
   // Schedule hourly aggregation
   setInterval(() => {

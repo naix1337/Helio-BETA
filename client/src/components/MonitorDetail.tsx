@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useStore, type Monitor, type Heartbeat, type UptimeSummary } from '../store/useStore';
 import * as monitorsApi from '../api/monitors';
-import { ArrowLeft, Pause, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, Pause, Play, Trash2, Edit3 } from 'lucide-react';
 import { prepCanvas, calcPoints, smoothPath, getCSSVar, hexA } from '../utils/chart';
 
 interface MonitorDetailProps {
@@ -16,6 +16,7 @@ export default function MonitorDetail({ monitorId, onBack }: MonitorDetailProps)
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState('24h');
   const fetchMonitors = useStore((s) => s.fetchMonitors);
+  const setEditMonitor = useStore((s) => s.setEditMonitor);
   const chartRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -174,6 +175,9 @@ export default function MonitorDetail({ monitorId, onBack }: MonitorDetailProps)
               <Pause className="w-[15px] h-[15px]" /> Pausieren
             </button>
           )}
+          <button onClick={() => setEditMonitor(monitorId)} className="px-4 py-2 rounded-[var(--radius-box)] text-[0.85rem] border cursor-pointer inline-flex items-center gap-2" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)', background: 'transparent' }}>
+            <Edit3 className="w-[15px] h-[15px]" /> Bearbeiten
+          </button>
           <button onClick={handleDelete} className="px-4 py-2 rounded-[var(--radius-box)] text-[0.85rem] border cursor-pointer inline-flex items-center gap-2" style={{ borderColor: 'var(--color-down-soft)', color: 'var(--color-down)', background: 'transparent' }}>
             <Trash2 className="w-[15px] h-[15px]" /> Löschen
           </button>

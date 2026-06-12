@@ -1,36 +1,28 @@
-import { useState } from 'react';
-import { useStore } from '../store/useStore';
-import type { ViewName } from '../data/mockData';
-import { Search, LayoutDashboard, Server, Bell, Globe, LineChart, Users, Settings, ChevronsUpDown, Box, Plus, LogOut } from 'lucide-react';
-import MonitorForm from './MonitorForm';
+import { useStore, type ViewName } from '../store/useStore';
+import { Search, LayoutDashboard, Server, Box, Bell, Globe, LineChart, Users, Settings, ChevronsUpDown, Plus, LogOut } from 'lucide-react';
 
-const NAV_GROUPS: { label: string; items: { view: ViewName; icon: React.ElementType; badgeType?: string }[] }[] = [
+const NAV_GROUPS: { label: string; items: { view: ViewName; icon: React.ElementType; display: string; badgeType?: string }[] }[] = [
   {
     label: 'Monitoring',
     items: [
-      { view: 'overview', icon: LayoutDashboard },
-      { view: 'nodes', icon: Server },
-      { view: 'alerts', icon: Bell, badgeType: 'down' },
-    ],
-  },
-  {
-    label: 'Benachrichtigungen',
-    items: [
-      { view: 'containers', icon: Box },
+      { view: 'overview', icon: LayoutDashboard, display: 'Übersicht' },
+      { view: 'nodes', icon: Server, display: 'Monitore' },
+      { view: 'containers', icon: Box, display: 'Container' },
+      { view: 'alerts', icon: Bell, display: 'Alerts', badgeType: 'down' },
     ],
   },
   {
     label: 'Transparenz',
     items: [
-      { view: 'status', icon: Globe },
-      { view: 'metrics', icon: LineChart },
+      { view: 'status', icon: Globe, display: 'Status-Page' },
+      { view: 'metrics', icon: LineChart, display: 'Metriken' },
+      { view: 'team', icon: Users, display: 'Team' },
     ],
   },
   {
     label: 'System',
     items: [
-      { view: 'team', icon: Users },
-      { view: 'settings', icon: Settings },
+      { view: 'settings', icon: Settings, display: 'Einstellungen' },
     ],
   },
 ];
@@ -43,7 +35,8 @@ export default function Sidebar() {
   const user = useStore((s) => s.user);
   const logout = useStore((s) => s.logout);
   const monitors = useStore((s) => s.monitors);
-  const [showForm, setShowForm] = useState(false);
+  const setShowMonitorForm = useStore((s) => s.setShowMonitorForm);
+  const fetchMonitors = useStore((s) => s.fetchMonitors);
 
   const downCount = monitors.filter((m) => m.status === 'DOWN' || m.status === 'DEGRADED').length;
 
@@ -103,7 +96,7 @@ export default function Sidebar() {
             />
           </div>
           <button
-            onClick={() => setShowForm(true)}
+            onClick={() => setShowMonitorForm(true)}
             className="w-[38px] h-[38px] rounded-[9px] grid place-items-center border cursor-pointer flex-none"
             style={{ background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: 'var(--color-primary-fg)' }}
             title="Neuen Monitor erstellen"
@@ -136,7 +129,7 @@ export default function Sidebar() {
                     `}
                   >
                     <Icon className="w-[17px] h-[17px] flex-none opacity-85" />
-                    {item.view === 'containers' ? 'Notifications' : group.label === 'Monitoring' ? (item.view === 'overview' ? 'Übersicht' : item.view === 'nodes' ? 'Monitore' : 'Alerts') : item.view === 'status' ? 'Status-Page' : item.view === 'metrics' ? 'Metriken' : item.view === 'team' ? 'Team' : 'Einstellungen'}
+                    {item.display}
                     {badge && (
                       <span className={`ml-auto font-mono text-[0.7rem] rounded-full px-[8px] py-[1px] ${
                         bType === 'down' ? 'text-[var(--color-down)] bg-[var(--color-down-soft)]' :
@@ -168,14 +161,12 @@ export default function Sidebar() {
               <div className="text-[0.86rem] font-[520] truncate" style={{ color: 'var(--color-text)' }}>{user?.email || 'Gast'}</div>
               <div className="text-[0.74rem] font-mono" style={{ color: 'var(--color-text-dim)' }}>{user?.role || '—'}</div>
             </div>
-            <button onClick={logout} className="w-[28px] h-[28px] rounded-[6px] grid place-items-center border bg-none cursor-pointer" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-dim)' }} title="Abmelden">
+            <button onClick={logout} className="w-[28px] h-[28px] rounded-[6px] grid place-items-center border cursor-pointer" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-dim)', background: 'transparent' }} title="Abmelden">
               <LogOut className="w-[14px] h-[14px]" />
             </button>
           </div>
         </div>
       </aside>
-
-      {showForm && <MonitorForm onClose={() => { setShowForm(false); useStore.getState().fetchMonitors(); }} />}
     </>
   );
 }
