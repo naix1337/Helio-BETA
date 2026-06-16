@@ -1,4 +1,4 @@
-# Helio — Self-hosted Uptime & Container Monitoring
+# Helio BETA — Self-hosted Uptime & Container Monitoring
 
 ![Version](https://img.shields.io/badge/version-2.0.0-2EE0CE)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6)
