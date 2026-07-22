@@ -1,6 +1,7 @@
 import type { IChecker, CheckResult } from './IChecker.js';
-import type { PushConfig, Heartbeat } from '@pulse/shared';
+import type { PushConfig } from '@pulse/shared';
 import { registerChecker } from './registry.js';
+import { getDb } from '../db/connection.js';
 
 /**
  * Push Checker
@@ -9,6 +10,8 @@ import { registerChecker } from './registry.js';
  * a push URL generated from the monitor's token. The engine stores the last
  * push timestamp. If no push arrives within interval + grace period, the
  * monitor is marked DOWN.
+ *
+ * Push timestamps are persisted in SQLite to survive restarts (migration 012).
  */
 export class PushChecker implements IChecker {
   readonly type = 'push';
@@ -16,36 +19,68 @@ export class PushChecker implements IChecker {
   async check(config: unknown): Promise<CheckResult> {
     const cfg = config as PushConfig;
 
-    // The real check logic is handled by the engine via recordPushHit() and checking recency.
-    // Here we just validate the config and return a check based on last push time.
-
     if (!cfg.token) {
       return { status: 'DOWN', latencyMs: null, message: 'No push token configured', statusCode: null };
     }
 
-    // This check is a NO-OP for the actual push logic;
-    // the engine manages push state separately via PushTracker.
     return { status: 'UP', latencyMs: 0, message: 'Push token valid', statusCode: null };
   }
 }
 
 registerChecker(new PushChecker());
 
-/* ---------- Push Tracker (used by the engine) ---------- */
+/* ============================================================
+   Push Tracker — persisted in SQLite
+   ============================================================ */
 
-const pushTimestamps = new Map<string, number>();
-
+/**
+ * Record a push hit for the given token.
+ * Persists the current timestamp in SQLite.
+ */
 export function recordPushHit(token: string): void {
-  pushTimestamps.set(token, Date.now());
+  getDb().prepare(`
+    INSERT INTO push_tracking (token, last_push_at, created_at)
+    VALUES (?, datetime('now'), datetime('now'))
+    ON CONFLICT(token) DO UPDATE SET last_push_at = datetime('now')
+  `).run(token);
 }
 
+/**
+ * Get the last push timestamp for a token, in milliseconds since epoch.
+ * Returns undefined if the token has never been pushed to.
+ */
 export function getLastPushTime(token: string): number | undefined {
-  return pushTimestamps.get(token);
+  const row = getDb().prepare(
+    'SELECT last_push_at FROM push_tracking WHERE token = ?'
+  ).get(token) as { last_push_at: string } | undefined;
+
+  if (!row) return undefined;
+  return new Date(row.last_push_at + 'Z').getTime();
 }
 
-export function isPushExpired(token: string, intervalSeconds: number, graceSeconds: number): boolean {
-  const last = pushTimestamps.get(token);
+/**
+ * Check whether a push token's grace period has expired.
+ * A token is considered expired if no push has been received within
+ * (intervalSeconds + graceSeconds) of the current time.
+ */
+export function isPushExpired(
+  token: string,
+  intervalSeconds: number,
+  graceSeconds: number,
+): boolean {
+  const last = getLastPushTime(token);
   if (last === undefined) return true;
   const elapsed = (Date.now() - last) / 1000;
   return elapsed > intervalSeconds + graceSeconds;
+}
+
+/**
+ * Delete push tracking entries older than the given retention period.
+ * Called during aggregation.
+ */
+export function prunePushTracking(retentionDays: number = 30): number {
+  const result = getDb().prepare(
+    "DELETE FROM push_tracking WHERE last_push_at < datetime('now', ? || ' days')"
+  ).run(`-${retentionDays}`);
+  return result.changes;
 }

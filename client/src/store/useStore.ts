@@ -53,30 +53,9 @@ export interface Notification {
   createdAt: string;
 }
 
-/* ---------- Seeded PRNG for charts ---------- */
-function seeded(seed: number) {
-  let s = seed;
-  return () => { s = (s * 9301 + 49297) % 233280; return s / 233280; };
-}
-
-function makeSeries(n: number) {
-  const r1 = seeded(7), r2 = seeded(42);
-  const cpu: number[] = [];
-  const net: number[] = [];
-  let c = 38, nt = 60;
-  for (let i = 0; i < n; i++) {
-    c += (r1() - 0.5) * 10; c = Math.max(14, Math.min(92, c));
-    nt += (r2() - 0.5) * 22; nt = Math.max(20, Math.min(140, nt));
-    cpu.push(c); net.push(nt);
-  }
-  return { cpu, net };
-}
-
 export type ViewName = 'overview' | 'nodes' | 'containers' | 'alerts' | 'status' | 'metrics' | 'team' | 'settings';
 
 /* ---------- State ---------- */
-
-interface ChartSeries { cpu: number[]; net: number[] }
 
 interface AppState {
   // Auth
@@ -108,10 +87,6 @@ interface AppState {
   // Time range
   timeRange: string;
   setTimeRange: (r: string) => void;
-
-  // Chart (demo simulations)
-  mainSeries: ChartSeries;
-  pushTick: (cpu: number, net: number) => void;
 
   // Monitors (from API)
   monitors: Monitor[];
@@ -214,16 +189,6 @@ export const useStore = create<AppState>((set, get) => ({
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   timeRange: '24',
   setTimeRange: (r) => set({ timeRange: r }),
-
-  /* ---------- Chart ---------- */
-  mainSeries: makeSeries(96),
-  pushTick: (cpu, net) =>
-    set((s) => ({
-      mainSeries: {
-        cpu: [...s.mainSeries.cpu.slice(1), cpu],
-        net: [...s.mainSeries.net.slice(1), net],
-      },
-    })),
 
   /* ---------- API Data ---------- */
   monitors: [],

@@ -1,4 +1,6 @@
-/* Canvas chart drawing utilities — retina-aware, smooth paths */
+/* ============================================================
+   Canvas chart drawing utilities — retina-aware, smooth paths
+   ============================================================ */
 
 export interface PrepResult {
   ctx: CanvasRenderingContext2D;
@@ -36,6 +38,7 @@ export function calcPoints(
 }
 
 export function smoothPath(ctx: CanvasRenderingContext2D, p: { x: number; y: number }[]) {
+  if (p.length === 0) return;
   ctx.moveTo(p[0].x, p[0].y);
   for (let i = 0; i < p.length - 1; i++) {
     const xc = (p[i].x + p[i + 1].x) / 2;
@@ -139,37 +142,28 @@ export function drawMainChart(
   ctx.stroke();
 }
 
-function seeded(seed: number) {
-  let s = seed;
-  return () => {
-    s = (s * 9301 + 49297) % 233280;
-    return s / 233280;
-  };
-}
-
-export function drawSparkline(
+/**
+ * Draw a sparkline from actual data (no seeded PRNG).
+ * Data should be an array of numeric values.
+ */
+export function drawSparklineFromData(
   canvas: HTMLCanvasElement,
+  data: number[],
   colorVar: string,
-  seed: number,
-  range?: { min: number; max: number },
-  clamp?: { min: number; max: number },
 ): void {
   const prep = prepCanvas(canvas);
   if (!prep) return;
   const { ctx, w, h } = prep;
   ctx.clearRect(0, 0, w, h);
+
+  if (data.length < 2) return;
+
   const color = getCSSVar(colorVar);
-  const r = seeded(seed);
-  const n = 28;
-  const data: number[] = [];
-  let v = range ? (range.min + range.max) / 2 : 50;
-  for (let i = 0; i < n; i++) {
-    v += (r() - 0.5) * 16;
-    if (clamp) v = Math.max(clamp.min, Math.min(clamp.max, v));
-    data.push(v);
-  }
   const pad = 3;
-  const p = calcPoints(data, w, h, pad, 10, 100);
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const p = calcPoints(data, w, h, pad, min, max);
+
   const grad = ctx.createLinearGradient(0, 0, 0, h);
   grad.addColorStop(0, hexA(color, 0.25));
   grad.addColorStop(1, hexA(color, 0));
@@ -188,28 +182,29 @@ export function drawSparkline(
   ctx.stroke();
 }
 
+/**
+ * Draw a mini row sparkline for table cells.
+ * Used as inline status indicator.
+ */
 export function drawRowSpark(
   canvas: HTMLCanvasElement,
-  seed: number,
+  data: number[],
   state: 'ok' | 'warn' | 'down',
 ): void {
   const prep = prepCanvas(canvas);
   if (!prep) return;
   const { ctx, w, h } = prep;
   ctx.clearRect(0, 0, w, h);
+
+  if (data.length < 2) return;
+
   const colorMap = { ok: '--color-primary', warn: '--color-warn', down: '--color-down' };
   const color = getCSSVar(colorMap[state]);
-  const r = seeded(seed);
-  const n = 20;
-  const data: number[] = [];
-  let v = 45;
-  for (let i = 0; i < n; i++) {
-    v += (r() - 0.5) * 20;
-    v = Math.max(10, Math.min(95, v));
-    data.push(state === 'down' ? 6 : v);
-  }
   const pad = 2;
-  const p = calcPoints(data, w, h, pad, 0, 100);
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const p = calcPoints(data, w, h, pad, min, max);
+
   ctx.beginPath();
   smoothPath(ctx, p);
   ctx.strokeStyle = color;

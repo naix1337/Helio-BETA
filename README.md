@@ -1,12 +1,30 @@
 # Helio BETA — Self-hosted Uptime & Container Monitoring
 
-![Version](https://img.shields.io/badge/version-2.0.0-2EE0CE)
+![Version](https://img.shields.io/badge/version-2.1.0-2EE0CE)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![License](https://img.shields.io/badge/license-MIT-green)
+![Production Ready](https://img.shields.io/badge/production-ready-22BB33)
 
-Helio ist eine moderne, selbst-gehostete Monitoring-Plattform — Alternative zu **Uptime Kuma** und **Grafana** — mit Fokus auf saubere REST-API, erweiterbare Checker-Architektur, WebSocket-Live-Updates, **Proxmox Container-Monitoring** und ein Dark-First Dashboard. Ideal für Homelab-Betreiber, DevOps-Teams und Self-Hoster.
+Helio ist eine moderne, **produktionsreife**, selbst-gehostete Monitoring-Plattform — Alternative zu **Uptime Kuma** und **Grafana** — mit Fokus auf saubere REST-API, erweiterbare Checker-Architektur, WebSocket-Live-Updates, **Proxmox Container-Monitoring** und ein Dark-First Dashboard. Ideal für Homelab-Betreiber, DevOps-Teams und Self-Hoster.
+
+> **v2.1.0** — Production-Ready Release mit Security-Hardening, Observability, Deployment-Verbesserungen und Bugfixes. [Changelog](CHANGELOG.md)
+
 <img width="1661" height="709" alt="image" src="https://github.com/user-attachments/assets/2b5792d8-c8c9-4b1f-bf2d-84156a1243d7" />
+
+---
+
+## Inhaltsverzeichnis
+
+- [Features](#features)
+- [Architektur](#architektur)
+- [Quick Start](#quick-start)
+- [Produktions-Deployment](#produktions-deployment)
+- [Umgebungsvariablen](#umgebungsvariablen)
+- [API-Referenz](#api-referenz)
+- [Sicherheit](#sicherheit)
+- [Entwicklung](#entwicklung)
+- [Lizenz](#lizenz)
 
 ---
 
@@ -20,7 +38,7 @@ Helio ist eine moderne, selbst-gehostete Monitoring-Plattform — Alternative zu
 | **Ping (ICMP)** | System-`ping`, Fallback TCP Echo |
 | **DNS** | A/AAAA/CNAME/MX/TXT, erwarteter Wert, eigener Resolver |
 | **SSL/TLS** | Zertifikats-Ablauf, Warning-Schwellwert → DEGRADED |
-| **Push (Heartbeat)** | Token-URL, Grace-Period |
+| **Push (Heartbeat)** | Token-URL, Grace-Period, **persistiert in SQLite** |
 
 ### 🐳 Proxmox Container-Monitoring
 - **Live-Polling** aller LXC-Container und QEMU-VMs via Proxmox VE API
@@ -28,15 +46,35 @@ Helio ist eine moderne, selbst-gehostete Monitoring-Plattform — Alternative zu
 - **Per-Container Charts** mit umschaltbaren Tabs (CPU/RAM/Disk/Netzwerk)
 - **Auto-Discovery**: Erkennt alle Container im Cluster
 - Self-Signed Cert Support, Poll-Intervall konfigurierbar
+- **Passwort-Verschlüsselung**: AES-256-GCM in der Datenbank
 
 ### 📢 Benachrichtigungen (Provider-Pattern)
-Mehrere Benachrichtigungen pro Monitor zuweisbar: **Webhook**, **Telegram**, **Discord** (Embeds), **E-Mail (SMTP)**, **ntfy** — alle mit Test-Button.
+Mehrere Benachrichtigungen pro Monitor zuweisbar: **Webhook**, **Telegram**, **Discord** (Embeds), **E-Mail (SMTP)**, **ntfy** — alle mit Test-Button und **SSRF-Schutz**.
 
 ### 🔧 Monitoring-Engine
 - Scheduler-basiert (eigener Intervall pro Monitor, min 20s)
+- **Retry-Logik** (konfigurierbare Anzahl Wiederholungen)
 - Status-Transitionen (UP→DOWN feuert Events → Notifications + WS-Broadcast)
 - Heartbeat-Retention (7d Rohdaten, dann stündliche Aggregation)
-- Graceful Shutdown
+- Graceful Shutdown mit Queue-Drain
+
+### 🛡️ Sicherheit
+- **Helmet.js** Sicherheits-Header (XSS, Clickjacking, MIME-Sniffing)
+- **Rate-Limiting** für Auth-Endpunkte (10 Versuche/15min)
+- **API-Key Auth** mit SHA256-Hashing + Scope-Prüfung
+- **TOTP-2FA** via Authenticator-App
+- **SSRF-Schutz** für alle Notification-Provider
+- **Shell-Injection-Schutz** im PingChecker
+- **Proxmox-Passwort-Verschlüsselung** (AES-256-GCM)
+- **Non-Root Docker** Container
+- CORS, Security-Header, Request-Logging
+
+### 📊 Observability
+- **Strukturiertes Logging** (Pino) mit JSON-Output in Produktion
+- **Liveness/Readiness/Health-Endpoints** für Kubernetes/Docker
+- **Automatische DB-Backups** (täglich, konfigurierbare Aufbewahrung)
+- **Prometheus-kompatibel** über Strukturierte Logs
+- Request-Logging mit Dauer, Status-Code, Pfad
 
 ### 🎨 Dashboard
 - **Übersicht** — Live-KPIs, Latenz-Chart, Alert-Feed, Monitor-Tabelle
@@ -62,15 +100,15 @@ helio/
 │   ├── src/
 │   │   ├── checkers/      → HTTP, TCP, Ping, DNS, SSL, Push
 │   │   ├── collectors/    → Proxmox-VE-API-Client
-│   │   ├── db/            → SQLite (better-sqlite3), 11 Migrationen, CRUD-Queries
-│   │   ├── engine/        → Scheduler, Engine, ContainerCollector, Aggregation
-│   │   ├── middleware/     → JWT-Auth, API-Key-Auth, Error-Handler
-│   │   ├── notifications/ → Webhook, Telegram, Discord, Email, ntfy
+│   │   ├── db/            → SQLite (better-sqlite3), 13 Migrationen, CRUD-Queries
+│   │   ├── engine/        → Scheduler mit Jitter, Engine mit Retry, ContainerCollector
+│   │   ├── middleware/     → JWT-Auth, API-Key-Auth, Error-Handler, Rate-Limiter
+│   │   ├── notifications/ → Webhook, Telegram, Discord, Email, ntfy (+ Zod-Schemas)
 │   │   ├── routes/        → /api/v1/* (Auth, Monitore, Container, Notifications, …)
-│   │   ├── utils/         → URL-Safety (SSRF-Schutz)
+│   │   ├── utils/         → URL-Safety (SSRF-Schutz), Encryption (AES-256-GCM), Logger (Pino), Backup
 │   │   ├── ws/            → WebSocket (heartbeat:new, monitor:status-change)
-│   │   └── index.ts       → Server-Einstieg, Graceful Shutdown
-│   └── Dockerfile
+│   │   └── index.ts       → Server-Einstieg mit Helmet, Rate-Limiting, Graceful Shutdown
+│   └── Dockerfile         → Non-Root, Multi-Stage, dumb-init
 │
 ├── client/              # React + Vite + TypeScript + TailwindCSS v4
 │   └── src/
@@ -80,8 +118,10 @@ helio/
 │       ├── store/        → Zustand (Auth, Theme, View-Routing, API-Data)
 │       └── utils/        → Canvas-Chart-Engine (retina)
 │
-├── docker-compose.yml
-├── .env.example
+├── docker-compose.yml         # Dev-Deployment
+├── docker-compose.prod.yml    # Production-Deployment
+├── .env.example               # Env-Vorlage
+├── nginx/helio.conf           # Nginx-Reverse-Proxy-Konfiguration
 └── README.md
 ```
 
@@ -89,7 +129,7 @@ helio/
 
 ## Quick Start
 
-### Mit Docker
+### Mit Docker (Entwicklung)
 ```bash
 git clone https://github.com/naix1337/helio-v2.git
 cd helio
@@ -114,25 +154,80 @@ Passwort:  admin123
 
 ---
 
+## Produktions-Deployment
+
+### Docker Compose (Produktion)
+
+```bash
+# 1. Config vorbereiten
+cp .env.example .env
+# JWT_SECRET generieren:
+openssl rand -hex 64
+
+# 2. Starten
+docker compose -f docker-compose.prod.yml up -d
+
+# 3. Health-Check
+curl http://localhost:3001/api/v1/health
+```
+
+### Mit Nginx Reverse Proxy
+
+1. `docker compose -f docker-compose.prod.yml up -d helio`
+2. Nginx-Konfiguration aus `nginx/helio.conf` anpassen
+3. SSL-Zertifikate via Let's Encrypt/Certbot einrichten
+4. Nginx starten
+
+### Wichtige Produktions-Einstellungen
+
+| Einstellung | Empfehlung |
+|------------|------------|
+| `JWT_SECRET` | `openssl rand -hex 64` |
+| `CORS_ORIGIN` | Deine Domain (z.B. `https://helio.example.com`) |
+| `NODE_ENV` | `production` |
+| `LOG_LEVEL` | `info` (Produktion) oder `debug` (Fehlersuche) |
+| `BACKUP_ENABLED` | `true` |
+| `RETENTION_RAW_DAYS` | `7` (Rohdaten) / `30` (Backups) |
+
+### Health-Checks (für Kubernetes / Docker)
+
+| Endpoint | Zweck |
+|----------|-------|
+| `GET /api/v1/live` | Liveness — Server läuft |
+| `GET /api/v1/ready` | Readiness — DB verbunden |
+| `GET /api/v1/health` | Health — Details (Version, Uptime, Engine-Status) |
+
+---
+
 ## Umgebungsvariablen
 
 | Variable | Default | Beschreibung |
 |----------|---------|-------------|
+| `NODE_ENV` | `development` | Production schaltet Fehlerdetails aus |
 | `PORT` | `3001` | Server-Port |
+| `HOST` | `0.0.0.0` | Server-Host |
+| `LOG_LEVEL` | `info` | Pino-Loglevel (debug/info/warn/error) |
 | `DB_PATH` | `./helio.db` | SQLite-Datenbank |
-| `JWT_SECRET` | (random) | JWT-Secret |
-| `CORS_ORIGIN` | `*` | CORS |
+| `JWT_SECRET` | (random) | JWT-Secret (in Produktion **zwingend setzen**) |
+| `JWT_ACCESS_EXPIRY` | `15m` | Access-Token-Laufzeit |
+| `JWT_REFRESH_EXPIRY` | `7d` | Refresh-Token-Laufzeit |
+| `CORS_ORIGIN` | `*` | CORS (Produktion auf Domain beschränken) |
 | `RETENTION_RAW_DAYS` | `7` | Heartbeat-Aufbewahrung |
 | `NTFY_DEFAULT_SERVER` | `https://ntfy.sh` | Default ntfy-Server |
+| `BACKUP_ENABLED` | `true` | Automatische DB-Backups |
+| `BACKUP_DIR` | `/app/data/backups` | Backup-Verzeichnis |
+| `BACKUP_RETENTION_DAYS` | `30` | Backup-Aufbewahrung |
 
 ---
 
 ## API-Referenz
 
+Alle Endpunkte sind unter `http(s)://dein-server:3001/api/v1` erreichbar.
+
 ### Auth
 ```
-POST /api/v1/auth/register   { email, password }
-POST /api/v1/auth/login      { email, password }
+POST /api/v1/auth/register   { email, password }           → Rate Limited 10/15min
+POST /api/v1/auth/login      { email, password }           → Rate Limited 10/15min
 POST /api/v1/auth/refresh    { refreshToken }
 POST /api/v1/auth/2fa/setup  (JWT)
 POST /api/v1/auth/2fa/verify { token }  (JWT)
@@ -168,7 +263,7 @@ GET    /api/v1/notifications           (JWT)
 POST   /api/v1/notifications           { name, provider, config, monitorIds }
 PATCH  /api/v1/notifications/:id       { name?, config?, monitorIds? }
 DELETE /api/v1/notifications/:id
-POST   /api/v1/notifications/:id/test  (sendet Test)
+POST   /api/v1/notifications/:id/test  (JWT, Rate Limited 5/min)
 ```
 
 ### Status-Pages
@@ -187,21 +282,45 @@ DELETE /api/v1/api-keys/:id (JWT)
 ```
 Verwendung: `X-API-Key: pk_<Ihr-Key>` als Header.
 
+### Health
+```
+GET    /api/v1/live          — Liveness Probe
+GET    /api/v1/ready         — Readiness Probe
+GET    /api/v1/health        — Detail-Health (Version, DB, Engine)
+```
+
 ---
 
-## Container-Monitoring (Proxmox)
+## Sicherheit
 
-### Konfiguration
-1. **Container → Konfiguration** in der Sidebar
-2. Host: `https://dein-proxmox:8006`
-3. User: `root@pam`
-4. Passwort + Poll-Intervall
-5. **"Speichern & verbinden"**
+### OWASP-Maßnahmen
 
-### Anzeige
-- **KPI-Cards**: Container-Anzahl, CPU/RAM/Disk gesamt
-- **Container-Tabelle**: Name, VMID, Node, CPU/RAM/Disk Mini-Bars, Ping, Status
-- **Detail-Panel** (Klick auf Container): Metric-Tabs für CPU/RAM/Disk/Netzwerk mit Liniendiagramm
+| Maßnahme | Status |
+|----------|--------|
+| Rate Limiting (Auth) | ✅ Implementiert |
+| Helmet Security Header | ✅ Implementiert |
+| SQL Injection Prevention | ✅ Prepared Statements |
+| SSRF Protection | ✅ URL-Validierung + DNS-Check |
+| XSS Protection | ✅ Helmet + React |
+| CSRF (API via JWT) | ✅ Token-basiert |
+| Secrets Encryption (Proxmox) | ✅ AES-256-GCM |
+| Shell Injection Prevention | ✅ Host-Validierung |
+| Non-Root Container | ✅ Docker User |
+| No-new-privileges | ✅ Docker Security Opt |
+
+### Security-Konfiguration
+
+```bash
+# JWT-Secret (64 Zeichen Hex):
+openssl rand -hex 64
+
+# CORS auf Domain beschränken:
+CORS_ORIGIN=https://helio.example.com
+
+# Rate-Limiting (eingebaut):
+POST /api/v1/auth/login    → 10 Versuche / 15 Minuten
+POST /api/v1/auth/register → 10 Versuche / 15 Minuten
+```
 
 ---
 

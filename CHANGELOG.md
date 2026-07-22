@@ -1,5 +1,61 @@
 # Changelog
 
+## v2.1.0 (2026-07-22)
+
+### 🛡️ Security Hardening (OWASP Top 10)
+
+- **Rate Limiting** — Auth-Endpunkte (`/login`, `/register`) jetzt limitiert auf 10 Versuche/15min; API-Limit 120/min; Notification-Tests 5/min
+- **Helmet.js** — Sicherheits-Header für XSS, Clickjacking, MIME-Sniffing, etc.
+- **Shell Injection Prevention** — PingChecker host-validiert jetzt via Regex (IP/Hostname-only); `exec` wird mit `shell: false` aufgerufen
+- **SSRF Protection für ALLE Provider** — WebhookProvider hat jetzt SSRF-Schutz (vorher nur Discord/ntfy)
+- **Proxmox Passwort-Verschlüsselung** — AES-256-GCM mit JWT-Secret als Key; kein Klartext mehr in SQLite
+- **Push-Tracker Persistenz** — In-Memory Map durch SQLite-Tabelle ersetzt; überlebt Server-Neustarts
+- **Non-Root Docker User** — Container läuft als `helio:helio` (UID 1001) statt root
+- **`no-new-privileges`** Docker Security Option
+- **`x-powered-by` entfernt** — Kein Fingerprinting mehr
+- **CORS-Validierung** verbessert (Produktion auf Domain beschränkbar)
+
+### 📊 Observability
+
+- **Strukturiertes Logging** — Pino mit JSON-Output in Produktion, Pretty-Print in Dev
+- **Request-Logging** — Pfad, Methode, Status-Code, Dauer automatisch geloggt
+- **Sensitive-Data-Redaction** — Passwörter, Tokens, API-Keys werden aus Logs entfernt
+- **Health-Endpoints** — `GET /api/v1/live` (Liveness), `GET /api/v1/ready` (Readiness), `GET /api/v1/health` (Details mit Version/DB/Engine)
+- **Automatische DB-Backups** — Tägliche SQLite-Kopie mit konfigurierbarer Aufbewahrung (Default 30 Tage)
+
+### 🔧 Engine & Scheduler Verbesserungen
+
+- **Retry-Logik** — `retries`-Feld wird jetzt von der Engine berücksichtigt; linearer Backoff zwischen Versuchen
+- **Scheduler-Jitter** — Bis zu 10% zufälliger Versatz beim ersten Check verhindert Thundering-Herd
+- **Concurrency-Schutz** — Überspringt Ticks wenn vorheriger Check noch läuft (mit Log-Warnung)
+- **Push-Tracking Pruning** — Alte Push-Timestamps werden bei Aggregation bereinigt
+- **Container-Metrics Index** — Neuer Index auf `container_metrics.timestamp` für effizientes Pruning
+
+### 🐛 Bugfixes
+
+- **Shell Injection (Kritisch)** — PingChecker erlaubte Command-Injection via `host`-Feld
+- **Push-Tracker Datenverlust (Kritisch)** — In-Memory Map verlor alle Daten bei Neustart
+- **DNS-Checker Performance** — Dynamisches `import()` pro Check entfernt; stattdessen statischer Resolver
+- **Fake-Daten entfernt** — Seeded PRNG aus `chart.ts` und `useStore.ts` komplett entfernt; alle Charts zeigen echte API-Daten
+- **Notification-Config fehlende Validierung** — Provider-spezifische Zod-Schemas validieren jetzt die Konfigurationsstruktur
+- **Notification-Test ohne Rate-Limit** — Auf 5 Tests pro Minute limitiert
+
+### 📦 Architektur & Code-Qualität
+
+- **AES-256-GCM Encryption Utility** — Für Secrets in der Datenbank
+- **Structured Error Handling** — `AppError`-Klasse mit Status-Code + operational/technical Unterscheidung
+- **Backup Utility** — Automatische tägliche Backups mit Rotation
+- **Dockerfile optimiert** — Multi-stage mit separatem Client-Build; non-root User
+- **docker-compose.prod.yml** — Separates Production-Compose mit Security-Best-Practices
+- **Nginx-Reverse-Proxy-Konfiguration** — Inkl. WebSocket-Support, SSL, Caching für Assets
+- **Verbesserte .env.example** — Mit Produktions-Kommentaren und Sicherheitshinweisen
+
+### ⬆️ Neue Abhängigkeiten
+
+- `helmet` — Security Header
+- `express-rate-limit` — Rate Limiting
+- `pino` + `pino-pretty` — Strukturiertes Logging
+
 ## v2.0.0 (2026-06-12)
 
 ### 🚀 Neue Features

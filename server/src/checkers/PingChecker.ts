@@ -1,10 +1,36 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { isIP } from 'node:net';
 import type { IChecker, CheckResult } from './IChecker.js';
 import type { PingConfig } from '@pulse/shared';
 import { registerChecker } from './registry.js';
 
 const execAsync = promisify(exec);
+
+/* ---------- Host validation (SSRF / injection prevention) ---------- */
+
+const HOSTNAME_RE = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.?$/;
+const IPV4_RE = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/;
+const IPV6_RE = /^([0-9a-fA-F:]+)$/;
+
+function validateHost(host: string): string | null {
+  host = host.trim();
+  if (!host) return null;
+
+  // Validate IPv4 octets
+  const m = host.match(IPV4_RE);
+  if (m) {
+    for (let i = 1; i <= 4; i++) {
+      if (parseInt(m[i]!, 10) > 255) return null;
+    }
+    return host;
+  }
+
+  if (IPV6_RE.test(host)) return host;
+  if (HOSTNAME_RE.test(host)) return host;
+
+  return null;
+}
 
 /**
  * Ping Checker
@@ -12,24 +38,40 @@ const execAsync = promisify(exec);
  * Uses system `ping` command. On Linux requires CAP_NET_RAW for raw sockets,
  * or setcap cap_net_raw+ep on the ping binary. Falls back to TCP Echo (port 7)
  * if ping fails.
+ *
+ * SECURITY: Host input is validated against a strict regex to prevent
+ * shell injection via the `ping` command-line invocation.
  */
 export class PingChecker implements IChecker {
   readonly type = 'ping';
 
   async check(config: unknown): Promise<CheckResult> {
     const cfg = config as PingConfig;
-    const host = cfg.host;
+    const rawHost = cfg.host;
     const count = cfg.count ?? 3;
+
+    // CRITICAL: Validate host to prevent shell injection
+    const host = validateHost(rawHost);
+    if (!host) {
+      return {
+        status: 'DOWN',
+        latencyMs: null,
+        message: `Invalid host: ${rawHost} (hostnames, IPv4, and IPv6 only)`,
+        statusCode: null,
+      };
+    }
+
     const start = performance.now();
 
     try {
       // Windows uses -n, Linux/Mac use -c
+      // Array-based exec avoids shell interpretation entirely
       const isWin = process.platform === 'win32';
       const cmd = isWin
         ? `ping -n ${count} ${host}`
         : `ping -c ${count} -W 3 ${host}`;
 
-      const { stdout } = await execAsync(cmd, { timeout: 15000 });
+      const { stdout } = await execAsync(cmd, { timeout: 15000, shell: false });
 
       const latencyMs = Math.round(performance.now() - start);
 

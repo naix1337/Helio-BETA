@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import { getDb } from './connection.js';
 import type { ProxmoxContainer } from '../collectors/proxmox.js';
+import { encrypt, decrypt, isEncrypted } from '../utils/encryption.js';
 
 /* ---------- Proxmox Config ---------- */
 
@@ -12,30 +13,51 @@ export interface ProxmoxConfig {
   intervalSeconds: number;
 }
 
+/**
+ * Retrieve the Proxmox config with the password decrypted.
+ * Returns null if no config exists.
+ */
 export function getProxmoxConfig(): ProxmoxConfig | null {
   const row = getDb().prepare('SELECT * FROM proxmox_config WHERE id = ?').get('default') as Record<string, unknown> | undefined;
   if (!row) return null;
+
+  const encryptedPassword = row['password'] as string;
+  let password: string;
+  try {
+    password = isEncrypted(encryptedPassword)
+      ? decrypt(encryptedPassword)
+      : encryptedPassword; // fallback for legacy unencrypted passwords
+  } catch {
+    password = encryptedPassword; // if decryption fails, use as-is
+  }
+
   return {
     id: row['id'] as string,
     host: row['host'] as string,
     user: row['user'] as string,
-    password: row['password'] as string,
+    password,
     intervalSeconds: row['interval_seconds'] as number,
   };
 }
 
+/**
+ * Save or update the Proxmox config.
+ * The password is encrypted before storage using AES-256-GCM.
+ */
 export function setProxmoxConfig(cfg: { host: string; user: string; password: string; intervalSeconds?: number }): ProxmoxConfig {
   const existing = getProxmoxConfig();
+  const encryptedPassword = encrypt(cfg.password);
+
   if (existing) {
     getDb().prepare(`
       UPDATE proxmox_config SET host = ?, user = ?, password = ?, interval_seconds = ?, updated_at = datetime('now')
       WHERE id = 'default'
-    `).run(cfg.host, cfg.user, cfg.password, cfg.intervalSeconds ?? 60);
+    `).run(cfg.host, cfg.user, encryptedPassword, cfg.intervalSeconds ?? 60);
   } else {
     getDb().prepare(`
       INSERT INTO proxmox_config (id, host, user, password, interval_seconds, created_at, updated_at)
       VALUES ('default', ?, ?, ?, ?, datetime('now'), datetime('now'))
-    `).run(cfg.host, cfg.user, cfg.password, cfg.intervalSeconds ?? 60);
+    `).run(cfg.host, cfg.user, encryptedPassword, cfg.intervalSeconds ?? 60);
   }
   return getProxmoxConfig()!;
 }
@@ -75,18 +97,29 @@ export function saveContainerMetrics(containers: ProxmoxContainer[], pingResults
   const tx = db.transaction(() => {
     for (const c of containers) {
       const ping = pingResults?.get(c.vmid) ?? null;
-      insert.run(uuid(), c.vmid, c.name, c.node, c.type, c.status, c.cpu, c.mem, c.maxmem, c.disk, c.maxdisk, c.uptime ?? null, ping, c.netout ?? null, c.netin ?? null);
+      insert.run(
+        uuid(), c.vmid, c.name, c.node, c.type, c.status,
+        c.cpu, c.mem, c.maxmem, c.disk, c.maxdisk,
+        c.uptime ?? null, ping, c.netout ?? null, c.netin ?? null,
+      );
     }
   });
   tx();
 }
 
+/**
+ * Get the most recent metric snapshot for each container.
+ * Uses a subquery to find the latest row per vmid efficiently.
+ */
 export function getLatestContainerMetrics(): ContainerMetricSnapshot[] {
-  // Get most recent snapshot for each container
   const rows = getDb().prepare(`
-    SELECT * FROM container_metrics
-    WHERE id IN (SELECT MAX(id) FROM container_metrics GROUP BY vmid)
-    ORDER BY name
+    SELECT cm.* FROM container_metrics cm
+    INNER JOIN (
+      SELECT vmid, MAX(timestamp) as max_ts
+      FROM container_metrics
+      GROUP BY vmid
+    ) latest ON cm.vmid = latest.vmid AND cm.timestamp = latest.max_ts
+    ORDER BY cm.name
   `).all() as Record<string, unknown>[];
   return rows.map(rowToMetric);
 }
@@ -128,5 +161,7 @@ function rowToMetric(row: Record<string, unknown>): ContainerMetricSnapshot {
     uptime: row['uptime'] as number | null,
     pingMs: row['ping_ms'] as number | null,
     timestamp: row['timestamp'] as string,
+    netin: row['netin'] as number | null,
+    netout: row['netout'] as number | null,
   };
 }

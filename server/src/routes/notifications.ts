@@ -1,8 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { requireAuth } from '../middleware/auth.js';
+import { notificationTestLimiter } from '../middleware/rateLimiter.js';
 import * as queries from '../db/queries.js';
 import { testNotificationProvider } from '../notifications/index.js';
+import { notificationProviderSchemas } from '../notifications/schemas.js';
 
 const router = Router();
 
@@ -20,6 +22,21 @@ const updateSchema = z.object({
   monitorIds: z.array(z.string()).optional(),
 });
 
+/**
+ * Validate notification config against provider-specific schema.
+ * Returns an error string or null if valid.
+ */
+function validateProviderConfig(provider: string, config: Record<string, unknown>): string | null {
+  const schema = notificationProviderSchemas[provider];
+  if (!schema) return 'Unknown provider';
+
+  const result = schema.safeParse(config);
+  if (!result.success) {
+    return result.errors.map((e) => e.message).join(', ');
+  }
+  return null;
+}
+
 // GET /notifications
 router.get('/', requireAuth, (_req, res) => {
   const notifications = queries.listNotifications();
@@ -30,6 +47,14 @@ router.get('/', requireAuth, (_req, res) => {
 router.post('/', requireAuth, (req, res) => {
   try {
     const input = createSchema.parse(req.body);
+
+    // Validate config structure for the given provider
+    const configError = validateProviderConfig(input.provider, input.config as Record<string, unknown>);
+    if (configError) {
+      res.status(400).json({ success: false, error: configError });
+      return;
+    }
+
     const wrappedConfig = { provider: input.provider, data: input.config } as import('@pulse/shared').NotificationConfig;
     const notification = queries.createNotification({
       name: input.name,
@@ -66,6 +91,14 @@ router.patch('/:id', requireAuth, (req, res) => {
     if (input.provider !== undefined) updateInput['provider'] = input.provider;
     if (input.config !== undefined) {
       const provider = (input.provider || queries.getNotification(req.params['id']!)?.provider) as string;
+
+      // Validate config if provided
+      const configError = validateProviderConfig(provider, input.config as Record<string, unknown>);
+      if (configError) {
+        res.status(400).json({ success: false, error: configError });
+        return;
+      }
+
       updateInput['config'] = { provider, data: input.config } as import('@pulse/shared').NotificationConfig;
     }
     if (input.monitorIds !== undefined) updateInput['monitorIds'] = input.monitorIds;
@@ -95,8 +128,8 @@ router.delete('/:id', requireAuth, (req, res) => {
   res.json({ success: true, data: null });
 });
 
-// POST /notifications/:id/test
-router.post('/:id/test', requireAuth, async (req, res) => {
+// POST /notifications/:id/test — rate limited
+router.post('/:id/test', requireAuth, notificationTestLimiter, async (req, res) => {
   const notification = queries.getNotification(req.params['id']!);
   if (!notification) {
     res.status(404).json({ success: false, error: 'Notification not found' });

@@ -1,0 +1,81 @@
+version: "3.9"
+
+# ============================================================
+# Helio — Production Docker Compose
+# ============================================================
+# Usage:
+#   cp .env.example .env  # Edit JWT_SECRET and other values
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# For first-time setup with SSL (Let's Encrypt via Nginx Proxy Manager):
+#   docker compose -f docker-compose.prod.yml -f docker-compose.ssl.yml up -d
+# ============================================================
+
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  helio:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      args:
+        UID: 1001
+        GID: 1001
+    working_dir: /app/server
+    # Only expose on localhost — reverse proxy handles external traffic
+    expose:
+      - "3001"
+    volumes:
+      - helio-data:/app/data
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      - HOST=0.0.0.0
+      - DB_PATH=/app/data/helio.db
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET is required — generate with: openssl rand -hex 64}
+      - CORS_ORIGIN=${CORS_ORIGIN:-https://helio.example.com}
+      - RETENTION_RAW_DAYS=${RETENTION_RAW_DAYS:-7}
+      - NTFY_DEFAULT_SERVER=${NTFY_DEFAULT_SERVER:-https://ntfy.sh}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+      - BACKUP_ENABLED=${BACKUP_ENABLED:-true}
+      - BACKUP_DIR=${BACKUP_DIR:-/app/data/backups}
+      - BACKUP_RETENTION_DAYS=${BACKUP_RETENTION_DAYS:-30}
+    restart: unless-stopped
+    user: "1001:1001"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW         # Needed for ICMP ping
+      - NET_BIND_SERVICE
+    logging: *default-logging
+
+  # Optional: Nginx reverse proxy with SSL
+  # Uncomment and configure nginx/helio.conf for production use
+  # nginx:
+  #   image: nginx:alpine
+  #   ports:
+  #     - "80:80"
+  #     - "443:443"
+  #   volumes:
+  #     - ./nginx/helio.conf:/etc/nginx/conf.d/helio.conf:ro
+  #     - ./nginx/ssl:/etc/nginx/ssl:ro
+  #     - ./nginx/www:/var/www/html:ro
+  #   depends_on:
+  #     - helio
+  #   restart: unless-stopped
+  #   logging: *default-logging
+
+volumes:
+  helio-data:
