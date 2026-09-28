@@ -1,4 +1,5 @@
 import { connect } from 'node:tls';
+import { isIP } from 'node:net';
 import type { IChecker, CheckResult } from './IChecker.js';
 import type { SslConfig } from '@pulse/shared';
 import { registerChecker } from './registry.js';
@@ -12,10 +13,14 @@ export class SslChecker implements IChecker {
     const warningDays = cfg.warningDays ?? 30;
 
     return new Promise((resolve) => {
+      if (!cfg.host) {
+        resolve({ status: 'DOWN', latencyMs: null, message: 'No host configured', statusCode: null });
+        return;
+      }
       const socket = connect({
         host: cfg.host,
         port: cfg.port ?? 443,
-        servername: cfg.host,
+        ...(isIP(cfg.host) ? {} : { servername: cfg.host }),
         rejectUnauthorized: false,
       });
 
@@ -35,6 +40,8 @@ export class SslChecker implements IChecker {
         const now = new Date();
         const daysRemaining = Math.round((expiryDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
 
+        const authorized = socket.authorized;
+        const authError = socket.authorizationError;
         socket.end();
 
         if (daysRemaining <= 0) {
@@ -42,6 +49,13 @@ export class SslChecker implements IChecker {
             status: 'DOWN',
             latencyMs,
             message: `Certificate expired ${Math.abs(daysRemaining)} days ago (${cert.valid_to})`,
+            statusCode: null,
+          });
+        } else if (!authorized) {
+          resolve({
+            status: 'DEGRADED',
+            latencyMs,
+            message: `Certificate not trusted (${String(authError)}), expires in ${daysRemaining} days`,
             statusCode: null,
           });
         } else if (daysRemaining <= warningDays) {

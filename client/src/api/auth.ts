@@ -4,7 +4,7 @@ export interface UserPublic {
   id: string;
   email: string;
   totpEnabled: boolean;
-  role: string;
+  role: 'admin' | 'user';
   createdAt: string;
 }
 
@@ -14,22 +14,37 @@ export interface LoginResult {
   user: UserPublic;
 }
 
-export async function login(email: string, password: string): Promise<LoginResult | null> {
-  const res = await apiRequest<LoginResult>('POST', '/auth/login', { email, password }, { noAuth: true });
-  if (res.success && res.data) {
-    setTokens(res.data.accessToken, res.data.refreshToken);
-    return res.data;
+export class TwoFactorRequiredError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TwoFactorRequiredError';
   }
-  throw new Error(res.error || 'Login failed');
 }
 
-export async function register(email: string, password: string): Promise<LoginResult | null> {
-  const res = await apiRequest<LoginResult>('POST', '/auth/register', { email, password }, { noAuth: true });
+export async function login(email: string, password: string, totpToken?: string): Promise<LoginResult> {
+  const res = await apiRequest<LoginResult & { requires2fa?: boolean }>(
+    'POST', '/auth/login', { email, password, ...(totpToken ? { totpToken } : {}) }, { noAuth: true },
+  );
   if (res.success && res.data) {
     setTokens(res.data.accessToken, res.data.refreshToken);
     return res.data;
   }
-  throw new Error(res.error || 'Registration failed');
+  if (res.data?.requires2fa) throw new TwoFactorRequiredError(res.error || '2FA-Code erforderlich');
+  throw new Error(res.error || 'Login fehlgeschlagen');
+}
+
+export async function needsSetup(): Promise<boolean> {
+  const res = await apiRequest<{ needsSetup: boolean }>('GET', '/auth/setup', undefined, { noAuth: true });
+  return res.data?.needsSetup ?? false;
+}
+
+export async function setup(email: string, password: string): Promise<LoginResult> {
+  const res = await apiRequest<LoginResult>('POST', '/auth/setup', { email, password }, { noAuth: true });
+  if (res.success && res.data) {
+    setTokens(res.data.accessToken, res.data.refreshToken);
+    return res.data;
+  }
+  throw new Error(res.error || 'Einrichtung fehlgeschlagen');
 }
 
 export async function getProfile(): Promise<UserPublic | null> {

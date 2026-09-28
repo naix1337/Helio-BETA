@@ -1,35 +1,31 @@
-import { apiRequest } from './client';
+import { apiCall } from './client';
+
+export type ProviderType = 'webhook' | 'telegram' | 'discord' | 'email' | 'ntfy';
 
 export interface Notification {
   id: string;
   name: string;
-  provider: 'webhook' | 'telegram' | 'discord' | 'email' | 'ntfy';
-  config: Record<string, unknown>;
+  provider: ProviderType;
+  config: { provider?: string; data?: Record<string, unknown> } & Record<string, unknown>;
   monitorIds: string[];
   createdAt: string;
 }
 
-export async function listNotifications(): Promise<Notification[]> {
-  const res = await apiRequest<Notification[]>('GET', '/notifications');
-  return res.data ?? [];
+export interface NotificationInput {
+  name: string;
+  provider: ProviderType;
+  config: Record<string, unknown>;
+  monitorIds: string[];
 }
 
-export async function createNotification(data: Partial<Notification>): Promise<Notification | null> {
-  const res = await apiRequest<Notification>('POST', '/notifications', data);
-  return res.data ?? null;
+export function notificationConfig(n: Pick<Notification, 'config'>): Record<string, unknown> {
+  return (n.config?.data ?? n.config ?? {}) as Record<string, unknown>;
 }
 
-export async function updateNotification(id: string, data: Partial<Notification>): Promise<Notification | null> {
-  const res = await apiRequest<Notification>('PATCH', `/notifications/${id}`, data);
-  return res.data ?? null;
-}
-
-export async function deleteNotification(id: string): Promise<boolean> {
-  const res = await apiRequest('DELETE', `/notifications/${id}`);
-  return res.success;
-}
-
-export async function testNotification(id: string): Promise<boolean> {
-  const res = await apiRequest<{ success: boolean }>('POST', `/notifications/${id}/test`);
-  return res.data?.success ?? false;
-}
+export const listNotifications = () => apiCall<Notification[]>('GET', '/notifications');
+export const createNotification = (data: NotificationInput) => apiCall<Notification>('POST', '/notifications', data);
+export const updateNotification = (id: string, data: Partial<NotificationInput>) => apiCall<Notification>('PATCH', `/notifications/${id}`, data);
+export const deleteNotification = (id: string) => apiCall<null>('DELETE', `/notifications/${id}`);
+export const testNotification = (id: string) => apiCall<{ success: boolean; message: string }>('POST', `/notifications/${id}/test`);
+export const testNotificationConfig = (provider: ProviderType, config: Record<string, unknown>) =>
+  apiCall<{ success: boolean; message: string }>('POST', '/notifications/test', { provider, config });

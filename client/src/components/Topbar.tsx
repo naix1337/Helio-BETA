@@ -1,10 +1,12 @@
-import { useStore } from '../store/useStore';
+import { useStore, useIsAdmin } from '../store/useStore';
 import { Menu, Bell, Moon, Sun, Plus } from 'lucide-react';
 
 const VIEW_TITLES: Record<string, [string, string]> = {
-  overview: ['Übersicht', 'prod · alle Regionen'],
+  overview: ['Übersicht', 'Live-Status aller Monitore'],
   nodes: ['Monitore', 'Übersicht aller Monitore'],
   alerts: ['Alerts', 'Aktive Warnungen und Vorfälle'],
+  notifications: ['Benachrichtigungen', 'Webhook, Telegram, Discord, E-Mail, ntfy'],
+  maintenance: ['Wartung', 'Geplante Wartungsfenster'],
   containers: ['Container', 'Proxmox Container/VM Metriken'],
   status: ['Status-Page', 'Öffentliche Status-Seiten'],
   metrics: ['Metriken', 'Uptime- und Leistungsdaten'],
@@ -12,8 +14,7 @@ const VIEW_TITLES: Record<string, [string, string]> = {
   settings: ['Einstellungen', 'System-Konfiguration'],
 };
 
-const RANGE_VALS = ['1', '6', '24', '7d'] as const;
-const RANGE_LABELS: Record<string, string> = { '1': '1h', '6': '6h', '24': '24h', '7d': '7d' };
+const RANGE_VALS = ['1h', '6h', '24h', '7d'] as const;
 
 export default function Topbar() {
   const currentView = useStore((s) => s.currentView);
@@ -24,6 +25,9 @@ export default function Topbar() {
   const setTimeRange = useStore((s) => s.setTimeRange);
   const setView = useStore((s) => s.setView);
   const setShowMonitorForm = useStore((s) => s.setShowMonitorForm);
+  const hasProblems = useStore((s) => s.monitors.some((m) => m.status === 'DOWN' || m.status === 'DEGRADED'));
+  const isAdmin = useIsAdmin();
+  const showRange = currentView === 'overview';
 
   const [title, subtitle] = VIEW_TITLES[currentView] || ['Helio', 'Monitoring'];
 
@@ -62,7 +66,7 @@ export default function Topbar() {
       {/* Topbar actions */}
       <div className="flex items-center gap-2">
         {/* Time range segmented */}
-        <div className="inline-flex border border-[var(--color-border)] rounded-[9px] overflow-hidden bg-[var(--color-surface-2)] max-[600px]:hidden">
+        {showRange && <div className="inline-flex border border-[var(--color-border)] rounded-[9px] overflow-hidden bg-[var(--color-surface-2)] max-[600px]:hidden">
           {RANGE_VALS.map((r) => (
             <button
               key={r}
@@ -73,10 +77,10 @@ export default function Topbar() {
                   : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)]'
               }`}
             >
-              {r === '7d' ? '7d' : `${r}h`}
+              {r}
             </button>
           ))}
-        </div>
+        </div>}
 
         {/* Notification bell — navigiert zu Alerts */}
         <button
@@ -85,7 +89,7 @@ export default function Topbar() {
           aria-label="Benachrichtigungen"
         >
           <Bell className="w-[18px] h-[18px]" />
-          <span className="absolute top-[8px] right-[9px] w-[7px] h-[7px] rounded-full bg-[var(--color-down)]" style={{ boxShadow: '0 0 0 2px var(--color-bg)' }} />
+          {hasProblems && <span className="absolute top-[8px] right-[9px] w-[7px] h-[7px] rounded-full bg-[var(--color-down)]" style={{ boxShadow: '0 0 0 2px var(--color-bg)' }} />}
         </button>
 
         {/* Theme toggle */}
@@ -97,14 +101,13 @@ export default function Topbar() {
           {theme === 'dark' ? <Moon className="w-[18px] h-[18px]" /> : <Sun className="w-[18px] h-[18px]" />}
         </button>
 
-        {/* +Node button — öffnet MonitorForm */}
-        <button
-          onClick={() => setShowMonitorForm(true)}
-          className="btn-primary max-sm:hidden"
-        >
-          <Plus className="w-[18px] h-[18px]" />
-          Node
-        </button>
+        {/* + Monitor */}
+        {isAdmin && (
+          <button onClick={() => setShowMonitorForm(true)} className="btn btn-primary max-sm:hidden">
+            <Plus className="w-[18px] h-[18px]" />
+            Monitor
+          </button>
+        )}
       </div>
     </header>
   );

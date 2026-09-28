@@ -1,0 +1,11 @@
+**/node_modules
+**/dist
+**/*.db
+**/*.db-wal
+**/*.db-shm
+.git
+.env
+.env.*
+!.env.example
+design_extracted
+**/.helio-secret

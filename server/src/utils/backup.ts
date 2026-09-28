@@ -1,60 +1,39 @@
 /**
  * Automatic database backup module.
  *
- * Creates daily SQLite backups and prunes backups older than
- * the configured retention period. Backups are file-level copies
- * (safe because SQLite uses WAL mode).
+ * Uses SQLite's online backup API (safe while the DB is in use, including
+ * WAL contents) and prunes backups older than the configured retention.
  */
 
-import { copyFileSync, mkdirSync, readdirSync, statSync, unlinkSync, existsSync } from 'node:fs';
+import { mkdirSync, readdirSync, statSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { config } from '../config.js';
+import { getDb } from '../db/connection.js';
 import { logger } from './logger.js';
 
-const BACKUP_DIR = process.env['BACKUP_DIR'] || '/app/data/backups';
-const RETENTION_DAYS = parseInt(process.env['BACKUP_RETENTION_DAYS'] || '30', 10);
+export async function backupDatabase(): Promise<void> {
+  if (!config.backup.enabled) return;
 
-export function backupDatabase(): void {
-  if (process.env['BACKUP_ENABLED'] !== 'true') {
-    logger.debug('Backups disabled via BACKUP_ENABLED');
-    return;
-  }
-
-  if (!existsSync(BACKUP_DIR)) {
-    mkdirSync(BACKUP_DIR, { recursive: true });
-    logger.info({ dir: BACKUP_DIR }, 'Created backup directory');
-  }
-
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const backupPath = join(BACKUP_DIR, `helio-${timestamp}.db`);
-
+  const dir = config.backup.dir;
   try {
-    copyFileSync(config.dbPath, backupPath);
+    mkdirSync(dir, { recursive: true });
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupPath = join(dir, `helio-${timestamp}.db`);
+
+    await getDb().backup(backupPath);
     logger.info({ backupPath }, 'Database backup created');
 
-    // Prune old backups
-    const files = readdirSync(BACKUP_DIR)
-      .filter((f) => f.startsWith('helio-') && f.endsWith('.db'))
-      .map((f) => ({
-        name: f,
-        path: join(BACKUP_DIR, f),
-        mtime: statSync(join(BACKUP_DIR, f)).mtimeMs,
-      }))
-      .sort((a, b) => b.mtime - a.mtime); // newest first
-
-    const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - config.backup.retentionDays * 24 * 60 * 60 * 1000;
     let pruned = 0;
-
-    for (const file of files) {
-      if (file.mtime < cutoff) {
-        unlinkSync(file.path);
+    for (const f of readdirSync(dir)) {
+      if (!f.startsWith('helio-') || !f.endsWith('.db')) continue;
+      const p = join(dir, f);
+      if (statSync(p).mtimeMs < cutoff) {
+        unlinkSync(p);
         pruned++;
       }
     }
-
-    if (pruned > 0) {
-      logger.info({ count: pruned }, 'Pruned old backups');
-    }
+    if (pruned > 0) logger.info({ count: pruned }, 'Pruned old backups');
   } catch (err) {
     logger.error({ err }, 'Database backup failed');
   }

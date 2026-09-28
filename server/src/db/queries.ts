@@ -1,12 +1,26 @@
-import { v4 as uuid } from 'uuid';
+import { randomUUID as uuid } from 'node:crypto';
 import { getDb } from './connection.js';
 import type {
   Monitor, MonitorStatus, Heartbeat, Notification, User, UserPublic,
-  ApiKey, StatusPage, MaintenanceWindow, UptimeAggregation, UptimeSummary,
+  ApiKey, ApiKeyWithSecret, StatusPage, MaintenanceWindow, UptimeAggregation, UptimeSummary,
   CreateMonitorInput, UpdateMonitorInput, CreateNotificationInput,
 } from '@pulse/shared';
 
 /* ---------- Helpers ---------- */
+
+/**
+ * SQL expression for "now + offset" in the same ISO-8601 format that is used
+ * for stored timestamps (2026-01-01T12:00:00.000Z). Comparing against
+ * datetime('now') would compare different string formats and yield wrong results.
+ */
+const ISO_NOW_OFFSET = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)";
+const ISO_NOW = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+
+/** Normalize legacy SQLite `YYYY-MM-DD HH:MM:SS` (UTC) values to ISO-8601 */
+function toIso<T extends string | null>(value: T): T {
+  if (!value || value.includes('T')) return value;
+  return (value.replace(' ', 'T') + 'Z') as T;
+}
 
 function rowToMonitor(row: Record<string, unknown>): Monitor {
   return {
@@ -18,8 +32,8 @@ function rowToMonitor(row: Record<string, unknown>): Monitor {
     retries: row['retries'] as number,
     status: row['status'] as MonitorStatus,
     tags: JSON.parse(row['tags'] as string) as string[],
-    createdAt: row['created_at'] as string,
-    updatedAt: row['updated_at'] as string,
+    createdAt: toIso(row['created_at'] as string),
+    updatedAt: toIso(row['updated_at'] as string),
   };
 }
 
@@ -42,7 +56,7 @@ function rowToNotification(row: Record<string, unknown>): Notification {
     provider: row['provider'] as Notification['provider'],
     config: JSON.parse(row['config'] as string) as Notification['config'],
     monitorIds: [],
-    createdAt: row['created_at'] as string,
+    createdAt: toIso(row['created_at'] as string),
   };
 }
 
@@ -54,7 +68,7 @@ function rowToUser(row: Record<string, unknown>): User {
     totpSecret: row['totp_secret'] as string | null,
     totpEnabled: !!row['totp_enabled'],
     role: row['role'] as User['role'],
-    createdAt: row['created_at'] as string,
+    createdAt: toIso(row['created_at'] as string),
   };
 }
 
@@ -93,9 +107,10 @@ export function listMonitors(filter?: { status?: MonitorStatus; type?: string; t
   const params: unknown[] = [];
   if (filter?.status) { sql += ' AND status = ?'; params.push(filter.status); }
   if (filter?.type) { sql += ' AND type = ?'; params.push(filter.type); }
-  sql += ' ORDER BY created_at DESC';
+  sql += ' ORDER BY name COLLATE NOCASE ASC';
   const rows = getDb().prepare(sql).all(...params) as Record<string, unknown>[];
-  return rows.map(rowToMonitor);
+  const monitors = rows.map(rowToMonitor);
+  return filter?.tag ? monitors.filter((m) => m.tags.includes(filter.tag!)) : monitors;
 }
 
 export function updateMonitor(id: string, input: UpdateMonitorInput): Monitor | null {
@@ -125,7 +140,14 @@ export function deleteMonitor(id: string): boolean {
 }
 
 export function updateMonitorStatus(id: string, status: MonitorStatus): void {
-  getDb().prepare("UPDATE monitors SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, id);
+  getDb().prepare('UPDATE monitors SET status = ?, updated_at = ? WHERE id = ?').run(status, new Date().toISOString(), id);
+}
+
+export function findPushMonitorByToken(token: string): Monitor | null {
+  const row = getDb().prepare(
+    "SELECT * FROM monitors WHERE type = 'push' AND json_extract(config, '$.data.token') = ?",
+  ).get(token) as Record<string, unknown> | undefined;
+  return row ? rowToMonitor(row) : null;
 }
 
 /* ============================================================
@@ -153,10 +175,50 @@ export function getHeartbeats(monitorId: string, limit: number = 100, offset: nu
 export function getHeartbeatsByRange(monitorId: string, range: string): Heartbeat[] {
   const hours = range === '30d' ? 720 : range === '7d' ? 168 : 24;
   const rows = getDb().prepare(`
-    SELECT * FROM heartbeats WHERE monitor_id = ? AND timestamp >= datetime('now', ? || ' hours')
+    SELECT * FROM heartbeats WHERE monitor_id = ? AND timestamp >= ${ISO_NOW_OFFSET}
     ORDER BY timestamp DESC
-  `).all(monitorId, `-${hours}`) as Record<string, unknown>[];
+    LIMIT 5000
+  `).all(monitorId, `-${hours} hours`) as Record<string, unknown>[];
   return rows.map(rowToHeartbeat);
+}
+
+/**
+ * Last N heartbeats (status only) for every monitor — used for the
+ * Uptime-Kuma-style beat bar in the monitor list. Oldest first.
+ */
+export function getRecentBeatsForAll(count: number = 40): Record<string, { status: MonitorStatus; latencyMs: number | null; timestamp: string; message: string | null }[]> {
+  const rows = getDb().prepare(`
+    SELECT monitor_id, status, latency_ms, timestamp, message FROM (
+      SELECT monitor_id, status, latency_ms, timestamp, message,
+        ROW_NUMBER() OVER (PARTITION BY monitor_id ORDER BY timestamp DESC) AS rn
+      FROM heartbeats
+    ) WHERE rn <= ?
+    ORDER BY monitor_id, timestamp ASC
+  `).all(count) as { monitor_id: string; status: MonitorStatus; latency_ms: number | null; timestamp: string; message: string | null }[];
+  const out: Record<string, { status: MonitorStatus; latencyMs: number | null; timestamp: string; message: string | null }[]> = {};
+  for (const r of rows) {
+    (out[r.monitor_id] ??= []).push({ status: r.status, latencyMs: r.latency_ms, timestamp: r.timestamp, message: r.message });
+  }
+  return out;
+}
+
+/** Status transitions ("important" heartbeats) across all monitors, newest first */
+export function getStatusEvents(limit: number = 100): (Heartbeat & { previousStatus: MonitorStatus | null; monitorName: string })[] {
+  const rows = getDb().prepare(`
+    SELECT e.*, m.name AS monitor_name FROM (
+      SELECT h.*, LAG(h.status) OVER (PARTITION BY h.monitor_id ORDER BY h.timestamp) AS prev_status
+      FROM heartbeats h
+    ) e
+    JOIN monitors m ON m.id = e.monitor_id
+    WHERE e.prev_status IS NULL OR e.prev_status != e.status
+    ORDER BY e.timestamp DESC
+    LIMIT ?
+  `).all(limit) as Record<string, unknown>[];
+  return rows.map((r) => ({
+    ...rowToHeartbeat(r),
+    previousStatus: (r['prev_status'] as MonitorStatus | null) ?? null,
+    monitorName: r['monitor_name'] as string,
+  }));
 }
 
 export function getLatestHeartbeat(monitorId: string): Heartbeat | null {
@@ -180,8 +242,8 @@ export function count24hHeartbeats(monitorId: string): { total: number; failed: 
       COUNT(*) as total,
       SUM(CASE WHEN status IN ('DOWN', 'DEGRADED') THEN 1 ELSE 0 END) as failed
     FROM heartbeats
-    WHERE monitor_id = ? AND timestamp >= datetime('now', '-24 hours')
-  `).get(monitorId) as { total: number; failed: number };
+    WHERE monitor_id = ? AND timestamp >= ${ISO_NOW_OFFSET}
+  `).get(monitorId, '-24 hours') as { total: number; failed: number };
   return { total: row.total || 0, failed: row.failed || 0 };
 }
 
@@ -194,12 +256,21 @@ export function computeUptimeSummary(monitorId: string): UptimeSummary {
     const row = getDb().prepare(`
       SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'UP' THEN 1 ELSE 0 END) as up
+        SUM(CASE WHEN status IN ('UP', 'DEGRADED') THEN 1 ELSE 0 END) as up
       FROM heartbeats
-      WHERE monitor_id = ? AND timestamp >= datetime('now', ? || ' hours')
-    `).get(monitorId, `-${hours}`) as { total: number; up: number };
-    if (!row.total) return 100;
-    return Math.round((row.up / row.total) * 10000) / 100;
+      WHERE monitor_id = ? AND timestamp >= ${ISO_NOW_OFFSET} AND status != 'PENDING'
+    `).get(monitorId, `-${hours} hours`) as { total: number; up: number };
+    // Raw heartbeats are pruned after the retention period — fall back to hourly aggregates
+    const agg = getDb().prepare(`
+      SELECT SUM(total_checks) as total, SUM(total_checks - failed_checks) as up
+      FROM uptime_aggregations
+      WHERE monitor_id = ? AND period = 'hourly' AND timestamp >= ${ISO_NOW_OFFSET}
+        AND timestamp < COALESCE((SELECT MIN(timestamp) FROM heartbeats WHERE monitor_id = ?), ${ISO_NOW})
+    `).get(monitorId, `-${hours} hours`, monitorId) as { total: number | null; up: number | null };
+    const total = (row.total || 0) + (agg.total || 0);
+    const up = (row.up || 0) + (agg.up || 0);
+    if (!total) return 100;
+    return Math.round((up / total) * 10000) / 100;
   };
 
   return {
@@ -216,6 +287,31 @@ export function createUptimeAggregation(agg: Omit<UptimeAggregation, 'id'>): voi
     INSERT OR REPLACE INTO uptime_aggregations (id, monitor_id, period, timestamp, avg_latency_ms, min_latency_ms, max_latency_ms, uptime_percent, total_checks, failed_checks)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(uuid(), agg.monitorId, agg.period, agg.timestamp, agg.avgLatencyMs, agg.minLatencyMs, agg.maxLatencyMs, agg.uptimePercent, agg.totalChecks, agg.failedChecks);
+}
+
+/** Aggregate raw heartbeats of one monitor in [from, to) into one hourly row. */
+export function aggregateHour(monitorId: string, from: string, to: string): void {
+  const row = getDb().prepare(`
+    SELECT
+      COUNT(*) as total,
+      SUM(CASE WHEN status = 'DOWN' THEN 1 ELSE 0 END) as failed,
+      AVG(latency_ms) as avg_lat, MIN(latency_ms) as min_lat, MAX(latency_ms) as max_lat
+    FROM heartbeats
+    WHERE monitor_id = ? AND timestamp >= ? AND timestamp < ? AND status != 'PENDING'
+  `).get(monitorId, from, to) as { total: number; failed: number | null; avg_lat: number | null; min_lat: number | null; max_lat: number | null };
+  if (!row.total) return;
+  const failed = row.failed || 0;
+  createUptimeAggregation({
+    monitorId,
+    period: 'hourly',
+    timestamp: from,
+    avgLatencyMs: Math.round((row.avg_lat ?? 0) * 100) / 100,
+    minLatencyMs: row.min_lat ?? 0,
+    maxLatencyMs: row.max_lat ?? 0,
+    uptimePercent: Math.round(((row.total - failed) / row.total) * 10000) / 100,
+    totalChecks: row.total,
+    failedChecks: failed,
+  });
 }
 
 export function getUptimeAggregations(monitorId: string, period: 'hourly' | 'daily', limit: number = 168): UptimeAggregation[] {
@@ -240,8 +336,8 @@ export function getUptimeAggregations(monitorId: string, period: 'hourly' | 'dai
 
 export function pruneRawHeartbeats(retentionDays: number): number {
   const result = getDb().prepare(
-    "DELETE FROM heartbeats WHERE timestamp < datetime('now', ? || ' days')",
-  ).run(`-${retentionDays}`);
+    `DELETE FROM heartbeats WHERE timestamp < ${ISO_NOW_OFFSET}`,
+  ).run(`-${retentionDays} days`);
   return result.changes;
 }
 
@@ -310,6 +406,23 @@ export function getMonitorsForNotification(notificationId: string): string[] {
     .all(notificationId) as { monitor_id: string }[]).map((r) => r.monitor_id);
 }
 
+/** Replace the set of notifications attached to a monitor */
+export function setMonitorNotifications(monitorId: string, notificationIds: string[]): void {
+  const db = getDb();
+  db.transaction(() => {
+    db.prepare('DELETE FROM monitor_notifications WHERE monitor_id = ?').run(monitorId);
+    const insert = db.prepare('INSERT OR IGNORE INTO monitor_notifications (monitor_id, notification_id) VALUES (?, ?)');
+    for (const nid of notificationIds) {
+      if (getDb().prepare('SELECT 1 FROM notifications WHERE id = ?').get(nid)) insert.run(monitorId, nid);
+    }
+  })();
+}
+
+export function getNotificationIdsForMonitor(monitorId: string): string[] {
+  return (getDb().prepare('SELECT notification_id FROM monitor_notifications WHERE monitor_id = ?')
+    .all(monitorId) as { notification_id: string }[]).map((r) => r.notification_id);
+}
+
 export function getNotificationsForMonitor(monitorId: string): Notification[] {
   const rows = getDb().prepare(`
     SELECT n.* FROM notifications n
@@ -342,7 +455,32 @@ export function getUserByEmail(email: string): User | null {
   return row ? rowToUser(row) : null;
 }
 
-export function updateUserTotp(userId: string, secret: string, enabled: boolean): void {
+export function listUsers(): User[] {
+  const rows = getDb().prepare('SELECT * FROM users ORDER BY created_at ASC').all() as Record<string, unknown>[];
+  return rows.map(rowToUser);
+}
+
+export function countUsers(): number {
+  return (getDb().prepare('SELECT COUNT(*) as n FROM users').get() as { n: number }).n;
+}
+
+export function countAdmins(): number {
+  return (getDb().prepare("SELECT COUNT(*) as n FROM users WHERE role = 'admin'").get() as { n: number }).n;
+}
+
+export function deleteUser(id: string): boolean {
+  return getDb().prepare('DELETE FROM users WHERE id = ?').run(id).changes > 0;
+}
+
+export function updateUserPassword(id: string, passwordHash: string): void {
+  getDb().prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
+}
+
+export function updateUserRole(id: string, role: 'admin' | 'user'): void {
+  getDb().prepare('UPDATE users SET role = ? WHERE id = ?').run(role, id);
+}
+
+export function updateUserTotp(userId: string, secret: string | null, enabled: boolean): void {
   getDb().prepare('UPDATE users SET totp_secret = ?, totp_enabled = ? WHERE id = ?').run(secret, enabled ? 1 : 0, userId);
 }
 
@@ -350,7 +488,7 @@ export function updateUserTotp(userId: string, secret: string, enabled: boolean)
    API KEYS
    ============================================================ */
 
-export function createApiKey(userId: string, name: string, keyHash: string, keyPrefix: string, scopes: string[]): ApiKeyWithSecret {
+export function createApiKey(userId: string, name: string, keyHash: string, keyPrefix: string, scopes: ApiKey['scopes']): ApiKeyWithSecret {
   const id = uuid();
   getDb().prepare(`
     INSERT INTO api_keys (id, user_id, name, key_hash, key_prefix, scopes)
@@ -368,8 +506,8 @@ export function getApiKey(id: string): ApiKey | null {
     name: row['name'] as string,
     keyPrefix: row['key_prefix'] as string,
     scopes: JSON.parse(row['scopes'] as string),
-    lastUsedAt: row['last_used_at'] as string | null,
-    createdAt: row['created_at'] as string,
+    lastUsedAt: toIso(row['last_used_at'] as string | null),
+    createdAt: toIso(row['created_at'] as string),
   };
 }
 
@@ -382,8 +520,8 @@ export function getApiKeyByHash(keyHash: string): ApiKey | null {
     name: row['name'] as string,
     keyPrefix: row['key_prefix'] as string,
     scopes: JSON.parse(row['scopes'] as string),
-    lastUsedAt: row['last_used_at'] as string | null,
-    createdAt: row['created_at'] as string,
+    lastUsedAt: toIso(row['last_used_at'] as string | null),
+    createdAt: toIso(row['created_at'] as string),
   };
 }
 
@@ -395,8 +533,8 @@ export function listApiKeys(userId: string): ApiKey[] {
     name: r['name'] as string,
     keyPrefix: r['key_prefix'] as string,
     scopes: JSON.parse(r['scopes'] as string),
-    lastUsedAt: r['last_used_at'] as string | null,
-    createdAt: r['created_at'] as string,
+    lastUsedAt: toIso(r['last_used_at'] as string | null),
+    createdAt: toIso(r['created_at'] as string),
   }));
 }
 
@@ -432,8 +570,8 @@ export function getStatusPage(id: string): StatusPage | null {
     logoUrl: row['logo_url'] as string | null,
     monitorIds: JSON.parse(row['monitor_ids'] as string),
     incidentBanner: row['incident_banner'] as string | null,
-    createdAt: row['created_at'] as string,
-    updatedAt: row['updated_at'] as string,
+    createdAt: toIso(row['created_at'] as string),
+    updatedAt: toIso(row['updated_at'] as string),
   };
 }
 
@@ -447,8 +585,8 @@ export function getStatusPageBySlug(slug: string): StatusPage | null {
     logoUrl: row['logo_url'] as string | null,
     monitorIds: JSON.parse(row['monitor_ids'] as string),
     incidentBanner: row['incident_banner'] as string | null,
-    createdAt: row['created_at'] as string,
-    updatedAt: row['updated_at'] as string,
+    createdAt: toIso(row['created_at'] as string),
+    updatedAt: toIso(row['updated_at'] as string),
   };
 }
 
@@ -461,8 +599,8 @@ export function listStatusPages(): StatusPage[] {
     logoUrl: r['logo_url'] as string | null,
     monitorIds: JSON.parse(r['monitor_ids'] as string),
     incidentBanner: r['incident_banner'] as string | null,
-    createdAt: r['created_at'] as string,
-    updatedAt: r['updated_at'] as string,
+    createdAt: toIso(r['created_at'] as string),
+    updatedAt: toIso(r['updated_at'] as string),
   }));
 }
 
@@ -505,10 +643,10 @@ export function getMaintenanceWindow(id: string): MaintenanceWindow | null {
   return {
     id: row['id'] as string,
     monitorIds: JSON.parse(row['monitor_ids'] as string),
-    startsAt: row['starts_at'] as string,
-    endsAt: row['ends_at'] as string,
+    startsAt: toIso(row['starts_at'] as string),
+    endsAt: toIso(row['ends_at'] as string),
     description: row['description'] as string,
-    createdAt: row['created_at'] as string,
+    createdAt: toIso(row['created_at'] as string),
   };
 }
 
@@ -517,26 +655,26 @@ export function listMaintenanceWindows(): MaintenanceWindow[] {
   return rows.map((r) => ({
     id: r['id'] as string,
     monitorIds: JSON.parse(r['monitor_ids'] as string),
-    startsAt: r['starts_at'] as string,
-    endsAt: r['ends_at'] as string,
+    startsAt: toIso(r['starts_at'] as string),
+    endsAt: toIso(r['ends_at'] as string),
     description: r['description'] as string,
-    createdAt: r['created_at'] as string,
+    createdAt: toIso(r['created_at'] as string),
   }));
 }
 
 export function getActiveMaintenanceWindows(): MaintenanceWindow[] {
   const rows = getDb().prepare(`
     SELECT * FROM maintenance_windows
-    WHERE starts_at <= datetime('now') AND ends_at >= datetime('now')
+    WHERE starts_at <= ${ISO_NOW} AND ends_at >= ${ISO_NOW}
     ORDER BY starts_at
   `).all() as Record<string, unknown>[];
   return rows.map((r) => ({
     id: r['id'] as string,
     monitorIds: JSON.parse(r['monitor_ids'] as string),
-    startsAt: r['starts_at'] as string,
-    endsAt: r['ends_at'] as string,
+    startsAt: toIso(r['starts_at'] as string),
+    endsAt: toIso(r['ends_at'] as string),
     description: r['description'] as string,
-    createdAt: r['created_at'] as string,
+    createdAt: toIso(r['created_at'] as string),
   }));
 }
 

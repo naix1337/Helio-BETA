@@ -1,4 +1,5 @@
 import { request as httpsRequest } from 'node:https';
+import { request as httpRequest } from 'node:http';
 
 /**
  * Proxmox VE API Client
@@ -53,7 +54,8 @@ function proxmoxFetch(url: string, options: { method: string; body?: any; header
   }
 
   return new Promise((resolve, reject) => {
-    const req = httpsRequest(
+    const requestFn = isHttps ? httpsRequest : httpRequest;
+    const req = requestFn(
       {
         hostname: parsedUrl.hostname,
         port: parsedUrl.port || (isHttps ? 443 : 80),
@@ -110,7 +112,13 @@ export class ProxmoxClient {
     return `${this.host}/api2/json`;
   }
 
+  /** API token auth: user = "root@pam!tokenid", password = token secret (UUID) */
+  private get isApiToken(): boolean {
+    return this.user.includes('!');
+  }
+
   private async ensureAuth(): Promise<void> {
+    if (this.isApiToken) return;
     if (this.auth && Date.now() < this.authExpiry) return;
 
     const url = `${this.baseUrl}/access/ticket`;
@@ -118,8 +126,7 @@ export class ProxmoxClient {
 
     const res = await proxmoxFetch(url, { method: 'POST', body });
     if (!res.ok) {
-      const text = await res.text().catch(() => '');
-      throw new Error(`Proxmox auth failed: HTTP ${res.status}`);
+      throw new Error(`Proxmox auth failed: HTTP ${res.status} ${res.statusText}`.trim());
     }
 
     const data = (await res.json()) as {
@@ -139,10 +146,11 @@ export class ProxmoxClient {
     await this.ensureAuth();
     const res = await proxmoxFetch(`${this.baseUrl}${path}`, {
       method: 'GET',
-      headers: {
-        Cookie: `PVEAuthCookie=${this.auth!.ticket}`,
-      },
+      headers: this.isApiToken
+        ? { Authorization: `PVEAPIToken=${this.user}=${this.password}` }
+        : { Cookie: `PVEAuthCookie=${this.auth!.ticket}` },
     });
+    if (res.status === 401) this.auth = null; // ticket expired → re-auth next time
     if (!res.ok) { const body = await res.text().catch(() => ''); throw new Error(`Proxmox API error: ${res.status} ${path} - ${body.slice(0, 200)}`); }
     const json = (await res.json()) as { data: T };
     return json.data;
@@ -176,44 +184,42 @@ export class ProxmoxClient {
   /** List all LXC containers via node API */
   async listContainers(): Promise<ProxmoxContainer[]> {
     const containers: ProxmoxContainer[] = [];
-    try {
-      const nodes = await this.apiGet<any[]>('/nodes');
-      for (const node of nodes) {
-        try {
-          const ctList = await this.apiGet<any[]>(`/nodes/${node.node}/lxc`);
-          for (const ct of ctList) {
-            containers.push({
-              vmid: ct.vmid, name: ct.name || `CT ${ct.vmid}`, status: ct.status,
-              node: node.node, type: 'lxc' as const,
-              cpu: ct.cpu || 0, mem: ct.mem || 0, maxmem: ct.maxmem || 1,
-              disk: ct.disk || 0, maxdisk: ct.maxdisk || 1, uptime: ct.uptime,
-            });
-          }
-        } catch {} // node may not have LXC
-      }
-    } catch {}
+    const nodes = await this.apiGet<any[]>('/nodes');
+    for (const node of nodes) {
+      try {
+        const ctList = await this.apiGet<any[]>(`/nodes/${node.node}/lxc`);
+        for (const ct of ctList) {
+          containers.push({
+            vmid: ct.vmid, name: ct.name || `CT ${ct.vmid}`, status: ct.status,
+            node: node.node, type: 'lxc' as const,
+            cpu: ct.cpu || 0, mem: ct.mem || 0, maxmem: ct.maxmem || 1,
+            disk: ct.disk || 0, maxdisk: ct.maxdisk || 1, uptime: ct.uptime,
+            netin: ct.netin, netout: ct.netout,
+          });
+        }
+      } catch { /* node may be offline */ }
+    }
     return containers;
   }
 
   /** List all QEMU VMs via node API */
   async listVMs(): Promise<ProxmoxContainer[]> {
     const vms: ProxmoxContainer[] = [];
-    try {
-      const nodes = await this.apiGet<any[]>('/nodes');
-      for (const node of nodes) {
-        try {
-          const vmList = await this.apiGet<any[]>(`/nodes/${node.node}/qemu`);
-          for (const vm of vmList) {
-            vms.push({
-              vmid: vm.vmid, name: vm.name || `VM ${vm.vmid}`, status: vm.status,
-              node: node.node, type: 'qemu' as const,
-              cpu: vm.cpu || 0, mem: vm.mem || 0, maxmem: vm.maxmem || 1,
-              disk: vm.disk || 0, maxdisk: vm.maxdisk || 1, uptime: vm.uptime,
-            });
-          }
-        } catch {}
-      }
-    } catch {}
+    const nodes = await this.apiGet<any[]>('/nodes');
+    for (const node of nodes) {
+      try {
+        const vmList = await this.apiGet<any[]>(`/nodes/${node.node}/qemu`);
+        for (const vm of vmList) {
+          vms.push({
+            vmid: vm.vmid, name: vm.name || `VM ${vm.vmid}`, status: vm.status,
+            node: node.node, type: 'qemu' as const,
+            cpu: vm.cpu || 0, mem: vm.mem || 0, maxmem: vm.maxmem || 1,
+            disk: vm.disk || 0, maxdisk: vm.maxdisk || 1, uptime: vm.uptime,
+            netin: vm.netin, netout: vm.netout,
+          });
+        }
+      } catch { /* node may be offline */ }
+    }
     return vms;
   }
 
@@ -229,16 +235,16 @@ export class ProxmoxClient {
   /** Test connection to Proxmox */
   async testConnection(): Promise<{ success: boolean; message: string }> {
     try {
-      const nodes = await this.apiGet<any[]>('/nodes');
-      return {
-        success: true,
-        message: `Verbunden mit ${nodes.length} Nodes: ${nodes.map((n) => n.node).join(', ')}`,
-      };
-    } catch (err) {
-      return {
-        success: false,
-        message: err instanceof Error ? err.message : 'Connection failed',
-      };
-    }
+    const nodes = await this.apiGet<any[]>('/nodes');
+    return {
+      success: true,
+      message: `Verbunden mit ${nodes.length} Nodes: ${nodes.map((n) => n.node).join(', ')}`,
+    };
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Connection failed',
+    };
   }
+}
 }

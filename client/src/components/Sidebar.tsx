@@ -1,5 +1,5 @@
-import { useStore, type ViewName } from '../store/useStore';
-import { Search, LayoutDashboard, Server, Box, Bell, Globe, LineChart, Users, Settings, ChevronsUpDown, Plus, LogOut } from 'lucide-react';
+import { useStore, useIsAdmin, type ViewName } from '../store/useStore';
+import { Search, LayoutDashboard, Server, Box, Bell, Globe, LineChart, Users, Settings, Plus, LogOut, Megaphone, Wrench } from 'lucide-react';
 
 const NAV_GROUPS: { label: string; items: { view: ViewName; icon: React.ElementType; display: string; badgeType?: string }[] }[] = [
   {
@@ -9,6 +9,8 @@ const NAV_GROUPS: { label: string; items: { view: ViewName; icon: React.ElementT
       { view: 'nodes', icon: Server, display: 'Monitore' },
       { view: 'containers', icon: Box, display: 'Container' },
       { view: 'alerts', icon: Bell, display: 'Alerts', badgeType: 'down' },
+      { view: 'notifications', icon: Megaphone, display: 'Benachrichtigungen' },
+      { view: 'maintenance', icon: Wrench, display: 'Wartung' },
     ],
   },
   {
@@ -36,7 +38,9 @@ export default function Sidebar() {
   const logout = useStore((s) => s.logout);
   const monitors = useStore((s) => s.monitors);
   const setShowMonitorForm = useStore((s) => s.setShowMonitorForm);
-  const fetchMonitors = useStore((s) => s.fetchMonitors);
+  const search = useStore((s) => s.search);
+  const setSearch = useStore((s) => s.setSearch);
+  const isAdmin = useIsAdmin();
 
   const downCount = monitors.filter((m) => m.status === 'DOWN' || m.status === 'DEGRADED').length;
 
@@ -83,26 +87,33 @@ export default function Sidebar() {
             </span>
             Helio
           </span>
-          <span className="font-mono text-[0.66rem] tracking-wider uppercase px-[7px] py-[3px] rounded-[6px]" style={{ color: 'var(--color-text-dim)', border: '1px solid var(--color-border)' }}>dev build</span>
+          <span className="font-mono text-[0.66rem] tracking-wider uppercase px-[7px] py-[3px] rounded-[6px]" style={{ color: 'var(--color-text-dim)', border: '1px solid var(--color-border)' }}>v2.2</span>
         </div>
 
         {/* Search + Create */}
         <div className="mx-[14px] mb-[14px] mt-[2px] flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-[11px] top-1/2 -translate-y-1/2 w-[15px] h-[15px]" style={{ color: 'var(--color-text-dim)' }} />
-            <input type="search" placeholder="Suchen…" aria-label="Suchen"
+            <input type="search" placeholder="Monitore suchen…" aria-label="Monitore suchen"
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                const st = useStore.getState();
+                if (e.target.value && st.currentView !== 'nodes' && st.currentView !== 'overview') setView('nodes');
+                else if (st.detailMonitorId) st.setDetailMonitor(null);
+              }}
               className="w-full h-[38px] pl-[34px] pr-[12px] rounded-[9px] border text-[0.86rem] outline-none focus:border-[var(--color-primary)]"
               style={{ background: 'var(--color-surface-2)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
             />
           </div>
-          <button
+          {isAdmin && <button
             onClick={() => setShowMonitorForm(true)}
             className="w-[38px] h-[38px] rounded-[9px] grid place-items-center border cursor-pointer flex-none"
             style={{ background: 'var(--color-primary)', borderColor: 'var(--color-primary)', color: 'var(--color-primary-fg)' }}
             title="Neuen Monitor erstellen"
           >
             <Plus className="w-[18px] h-[18px]" />
-          </button>
+          </button>}
         </div>
 
         {/* Navigation */}
@@ -159,7 +170,7 @@ export default function Sidebar() {
             </span>
             <div className="min-w-0 flex-1">
               <div className="text-[0.86rem] font-[520] truncate" style={{ color: 'var(--color-text)' }}>{user?.email || 'Gast'}</div>
-              <div className="text-[0.74rem] font-mono" style={{ color: 'var(--color-text-dim)' }}>{user?.role || '—'}</div>
+              <div className="text-[0.74rem] font-mono" style={{ color: 'var(--color-text-dim)' }}>{user?.role === 'admin' ? 'Administrator' : user ? 'Betrachter' : '—'}</div>
             </div>
             <button onClick={logout} className="w-[28px] h-[28px] rounded-[6px] grid place-items-center border cursor-pointer" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-dim)', background: 'transparent' }} title="Abmelden">
               <LogOut className="w-[14px] h-[14px]" />

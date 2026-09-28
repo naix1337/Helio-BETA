@@ -1,32 +1,29 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { getHeartbeats } from '../api/monitors';
 import { prepCanvas, getCSSVar, hexA } from '../utils/chart';
-
-const RANGE_MAP: Record<string, string> = {
-  '1': '24h', '6': '24h', '24': '24h', '7d': '7d',
-};
 
 export default function MainChart() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const timeRange = useStore((s) => s.timeRange);
   const monitors = useStore((s) => s.monitors);
-  const monitorsLoading = useStore((s) => s.monitorsLoading);
+  const monitorsLoading = !useStore((s) => s.monitorsLoaded);
+  const monitorKey = monitors.filter((m) => m.status !== 'PAUSED').map((m) => m.id).join(',');
   const [latencies, setLatencies] = useState<number[]>([]);
   const [stats, setStats] = useState({ up: 0, total: 0, avgMs: 0, sources: '' });
 
   // Fetch real heartbeat data periodically
   useEffect(() => {
-    if (monitors.length === 0) return;
+    if (!monitorKey) return;
 
     let cancelled = false;
-    const fetch = async () => {
+    const load = async () => {
       const allLat: number[] = [];
       let up = 0, total = 0;
       const sources: string[] = [];
 
-      const activeMonitors = monitors.filter((m2) => m2.status !== 'PAUSED' && m2.status !== 'PENDING').slice(0, 10);
-      const apiRange = RANGE_MAP[timeRange] || '24h';
+      const activeMonitors = useStore.getState().monitors.filter((m2) => m2.status !== 'PAUSED').slice(0, 10);
+      const apiRange = timeRange;
 
       const results = await Promise.allSettled(
         activeMonitors.map((m) => getHeartbeats(m.id, apiRange))
@@ -38,14 +35,33 @@ export default function MainChart() {
         const hbs = r.value;
         if (hbs.length > 0) sources.push(activeMonitors[i]!.name);
         for (const hb of hbs) {
-          if (hb.latencyMs !== null) allLat.push(hb.latencyMs);
-          if (hb.status === 'UP') up++;
+          if (hb.status === 'PENDING') continue;
+          if (hb.status === 'UP' || hb.status === 'DEGRADED') up++;
           total++;
         }
       }
 
+      // Merge all monitors into time buckets (average latency per bucket), oldest → newest
+      const all = results.flatMap((r) => (r.status === 'fulfilled' ? r.value : []))
+        .filter((hb) => hb.latencyMs !== null)
+        .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+      const BUCKETS = 120;
+      if (all.length > 0) {
+        const t0 = new Date(all[0]!.timestamp).getTime();
+        const t1 = new Date(all[all.length - 1]!.timestamp).getTime();
+        const span = Math.max(1, t1 - t0);
+        const sums = new Array<number>(BUCKETS).fill(0);
+        const counts = new Array<number>(BUCKETS).fill(0);
+        for (const hb of all) {
+          const idx = Math.min(BUCKETS - 1, Math.floor(((new Date(hb.timestamp).getTime() - t0) / span) * BUCKETS));
+          sums[idx]! += hb.latencyMs!;
+          counts[idx]!++;
+        }
+        for (let i = 0; i < BUCKETS; i++) if (counts[i]) allLat.push(Math.round(sums[i]! / counts[i]!));
+      }
+
       if (!cancelled) {
-        setLatencies(allLat.slice(-200));
+        setLatencies(allLat);
         setStats({
           up, total,
           avgMs: allLat.length > 0 ? Math.round(allLat.reduce((a, b) => a + b, 0) / allLat.length) : 0,
@@ -54,10 +70,10 @@ export default function MainChart() {
       }
     };
 
-    fetch();
-    const interval = setInterval(fetch, 5000);
+    void load();
+    const interval = setInterval(load, 30000);
     return () => { cancelled = true; clearInterval(interval); };
-  }, [monitors.length, timeRange]);
+  }, [monitorKey, timeRange]);
 
   // Draw chart
   useEffect(() => {
@@ -125,7 +141,7 @@ export default function MainChart() {
         </div>
         {latencies.length > 0 && (
           <span className="font-mono text-[0.72rem] px-[8px] py-[3px] rounded-full border" style={{ borderColor: 'var(--color-primary-soft)', background: 'var(--color-primary-soft)', color: 'var(--color-primary)' }}>
-            {latencies.length} Datenpunkte
+            {timeRange}
           </span>
         )}
       </div>

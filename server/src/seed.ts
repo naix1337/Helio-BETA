@@ -1,6 +1,6 @@
 import { getDb, closeDb } from './db/connection.js';
 import bcrypt from 'bcryptjs';
-import { v4 as uuid } from 'uuid';
+import { randomUUID as uuid } from 'node:crypto';
 
 async function seed(): Promise<void> {
   const db = getDb();
@@ -9,12 +9,12 @@ async function seed(): Promise<void> {
 
   // 1. Create admin user
   const adminId = uuid();
-  const passwordHash = await bcrypt.hash('admin123', 12);
+  const passwordHash = await bcrypt.hash('admin12345', 12);
   db.prepare(`
     INSERT OR IGNORE INTO users (id, email, password_hash, role, created_at)
     VALUES (?, 'admin@helio.local', ?, 'admin', datetime('now'))
   `).run(adminId, passwordHash);
-  console.log('[seed] Admin user: admin@helio.local / admin123');
+  console.log('[seed] Admin user: admin@helio.local / admin12345');
 
   // 2. Create demo monitors
   const monitors = [
@@ -50,7 +50,7 @@ async function seed(): Promise<void> {
   `);
 
   for (const m of monitors) {
-    insertMonitor.run(m.id, m.name, m.type, JSON.stringify(m.config), m.intervalSeconds, m.status);
+    insertMonitor.run(m.id, m.name, m.type, JSON.stringify(m.config), m.interval, m.status);
     console.log(`[seed] Monitor: ${m.name} (${m.type})`);
   }
 

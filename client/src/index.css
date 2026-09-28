@@ -33,6 +33,7 @@
   --color-warn-soft: rgba(247, 201, 72, 0.14);
   --color-down-soft: rgba(247, 108, 108, 0.14);
   --color-nav-bg: rgba(11, 14, 20, 0.72);
+  --color-grid-line: rgba(255, 255, 255, 0.06);
 
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow-md: 0 12px 40px -12px rgba(0, 0, 0, 0.6);
@@ -71,9 +72,15 @@
   --color-warn-soft: rgba(201, 138, 6, 0.12);
   --color-down-soft: rgba(219, 74, 74, 0.12);
   --color-nav-bg: rgba(251, 252, 254, 0.78);
+  --color-grid-line: rgba(13, 20, 33, 0.07);
   --shadow-sm: 0 1px 2px rgba(13, 20, 33, 0.06);
   --shadow-md: 0 14px 40px -16px rgba(13, 20, 33, 0.16);
   --shadow-lg: 0 40px 120px -36px rgba(13, 20, 33, 0.22);
+}
+
+/* Tailwind v4 defaults borders to currentColor — use the theme border color instead */
+@layer base {
+  *, ::before, ::after, ::backdrop { border-color: var(--color-border); }
 }
 
 body {
@@ -121,7 +128,7 @@ body {
   min-width: 0;
 }
 
-@media (max-width: 860px) {
+@media (max-width: 767.98px) {
   .app-shell {
     grid-template-columns: 1fr;
   }
@@ -129,3 +136,93 @@ body {
     grid-column: 1;
   }
 }
+
+/* ---------- Shared UI primitives ---------- */
+.card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.card-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 14px 18px; border-bottom: 1px solid var(--color-border);
+}
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  height: 38px; padding: 0 14px; border-radius: var(--radius-box);
+  font: inherit; font-size: 0.86rem; font-weight: 520; white-space: nowrap;
+  border: 1px solid var(--color-border); background: transparent; color: var(--color-text-muted);
+  cursor: pointer; transition: background-color .15s, border-color .15s, color .15s, opacity .15s;
+}
+.btn:hover:not(:disabled) { color: var(--color-text); border-color: var(--color-border-strong); background: var(--color-surface-2); }
+.btn:disabled { opacity: 0.55; cursor: default; }
+.btn-primary {
+  background: var(--color-primary); border-color: var(--color-primary); color: var(--color-primary-fg);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.18) inset, 0 8px 24px -12px var(--color-primary-glow);
+}
+.btn-primary:hover:not(:disabled) { background: var(--color-primary-hover); border-color: var(--color-primary-hover); color: var(--color-primary-fg); }
+.btn-danger { color: var(--color-down); border-color: var(--color-down-soft); }
+.btn-danger:hover:not(:disabled) { color: var(--color-down); background: var(--color-down-soft); border-color: var(--color-down-soft); }
+.btn-icon { width: 34px; height: 34px; padding: 0; border-radius: 8px; }
+.btn-sm { height: 30px; padding: 0 10px; font-size: 0.8rem; }
+
+.input {
+  width: 100%; height: 42px; padding: 0 12px; border-radius: var(--radius-box);
+  border: 1px solid var(--color-border); background: var(--color-bg); color: var(--color-text);
+  font: inherit; font-size: 0.9rem; outline: none; box-sizing: border-box;
+}
+textarea.input { height: auto; min-height: 84px; padding: 10px 12px; resize: vertical; }
+.input:focus { border-color: var(--color-primary); }
+.input.mono { font-family: var(--font-mono); font-size: 0.85rem; }
+.label { display: block; font-size: 0.82rem; font-weight: 500; margin-bottom: 6px; color: var(--color-text-muted); }
+.hint { font-size: 0.75rem; margin-top: 4px; color: var(--color-text-dim); }
+.check { display: inline-flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--color-text-muted); cursor: pointer; }
+.check input { accent-color: var(--color-primary); width: 16px; height: 16px; }
+
+.modal-backdrop {
+  position: fixed; inset: 0; z-index: 60; display: flex; align-items: flex-start; justify-content: center;
+  padding: 60px 16px 16px; background: rgba(0,0,0,0.6); overflow-y: auto;
+}
+.modal {
+  width: 100%; max-width: 580px; border: 1px solid var(--color-border); border-radius: var(--radius-lg);
+  background: var(--color-surface); padding: 24px; box-shadow: var(--shadow-lg);
+}
+
+.alert { padding: 10px 12px; border-radius: var(--radius-sm); font-size: 0.85rem; }
+.alert-error { color: var(--color-down); background: var(--color-down-soft); }
+.alert-ok { color: var(--color-ok); background: var(--color-ok-soft); }
+.alert-warn { color: var(--color-warn); background: var(--color-warn-soft); }
+
+.pill {
+  display: inline-flex; align-items: center; gap: 6px; font-family: var(--font-mono); font-size: 0.74rem; font-weight: 500;
+  padding: 3px 10px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap;
+}
+.pill-ok { color: var(--color-ok); background: var(--color-ok-soft); }
+.pill-down { color: var(--color-down); background: var(--color-down-soft); }
+.pill-warn { color: var(--color-warn); background: var(--color-warn-soft); }
+.pill-dim { color: var(--color-text-dim); background: var(--color-surface-2); }
+.pill-primary { color: var(--color-primary); background: var(--color-primary-soft); }
+
+.chip {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--color-border); background: var(--color-bg);
+  color: var(--color-text-muted); font-family: var(--font-mono); font-size: 0.8rem; cursor: pointer;
+}
+.chip.active { background: var(--color-primary-soft); border-color: var(--color-primary); color: var(--color-primary); }
+
+/* Uptime-Kuma style heartbeat bar */
+.beat-bar { display: flex; gap: 3px; align-items: center; height: 22px; }
+.beat { flex: 0 0 auto; width: 6px; height: 100%; border-radius: 3px; background: var(--color-surface-3); transition: transform .12s; }
+.beat:hover { transform: scaleY(1.15); }
+.beat-UP { background: var(--color-ok); }
+.beat-DOWN { background: var(--color-down); }
+.beat-DEGRADED { background: var(--color-warn); }
+.beat-PENDING { background: var(--color-warn); opacity: 0.6; }
+
+.table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+.table th {
+  font-family: var(--font-mono); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500;
+  text-align: left; padding: 10px 16px; border-bottom: 1px solid var(--color-border); color: var(--color-text-dim);
+  background: var(--color-surface-2); white-space: nowrap;
+}
+.table td { padding: 11px 16px; border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); }
+.table tr:last-child td { border-bottom: none; }

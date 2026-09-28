@@ -1,30 +1,28 @@
-version: "3.9"
-
+# Helio — quick start
+#   docker compose up -d   →  http://localhost:3001
+# The first visit asks you to create the admin account.
 services:
-  pulse:
+  helio:
     build:
       context: .
       dockerfile: server/Dockerfile
-    working_dir: /app/server
+    image: helio:latest
+    container_name: helio
     ports:
       - "3001:3001"
     volumes:
-      - pulse-data:/app/data
+      - helio-data:/app/data
     environment:
-      - PORT=3001
-      - HOST=0.0.0.0
-      - DB_PATH=/app/data/pulse.db
-      - JWT_SECRET=${JWT_SECRET:-change-me-in-production}
-      - CORS_ORIGIN=*
-      - RETENTION_RAW_DAYS=7
-      - NTFY_DEFAULT_SERVER=https://ntfy.sh
+      # Optional: set a fixed secret (otherwise one is generated in the data volume)
+      - JWT_SECRET=${JWT_SECRET:-}
+      - TZ=${TZ:-Europe/Berlin}
+      - RETENTION_RAW_DAYS=${RETENTION_RAW_DAYS:-7}
+      - BACKUP_ENABLED=${BACKUP_ENABLED:-true}
+      # Allow webhooks/ntfy targets in your LAN (e.g. self-hosted ntfy)
+      - NOTIFICATION_ALLOW_PRIVATE=${NOTIFICATION_ALLOW_PRIVATE:-true}
+    sysctls:
+      - net.ipv4.ping_group_range=0 2147483647
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3001/api/v1/health"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
 
 volumes:
-  pulse-data:
+  helio-data:

@@ -1,126 +1,169 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent, type ReactNode } from 'react';
+import { X } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import * as monitorsApi from '../api/monitors';
-import { X } from 'lucide-react';
-import type { Monitor } from '../store/useStore';
+import { serverOrigin } from '../api/client';
+import CopyField from './CopyField';
+import { pushUrl as buildPushUrl } from '../utils/format';
 
-const MONITOR_TYPES = [
+const pushUrl = (token: string) => buildPushUrl(serverOrigin(), token);
+
+type MonitorType = monitorsApi.MonitorType;
+
+const MONITOR_TYPES: { value: MonitorType; label: string }[] = [
   { value: 'http', label: 'HTTP(s)' },
   { value: 'tcp', label: 'TCP-Port' },
-  { value: 'ping', label: 'Ping (ICMP)' },
+  { value: 'ping', label: 'Ping' },
   { value: 'dns', label: 'DNS' },
-  { value: 'ssl', label: 'SSL/TLS' },
-  { value: 'push', label: 'Push (Heartbeat)' },
-] as const;
+  { value: 'ssl', label: 'SSL-Zertifikat' },
+  { value: 'push', label: 'Push' },
+];
 
 interface MonitorFormProps {
   onClose: () => void;
   editId?: string;
 }
 
-function extractConfigData(config: Record<string, unknown>): Record<string, unknown> {
-  const inner = config as { data?: Record<string, unknown> };
-  return inner.data ?? config;
+function Field({ label, children, hint, className = '' }: { label: string; children: ReactNode; hint?: string; className?: string }) {
+  return (
+    <div className={className}>
+      <label className="label">{label}</label>
+      {children}
+      {hint && <p className="hint m-0">{hint}</p>}
+    </div>
+  );
 }
 
 export default function MonitorForm({ onClose, editId }: MonitorFormProps) {
-  const fetchMonitors = useStore((s) => s.fetchMonitors);
-  const [loading, setLoading] = useState(false);
-  const [type, setType] = useState<'http' | 'tcp' | 'ping' | 'dns' | 'ssl' | 'push'>('http');
-  const [name, setName] = useState('');
-  const [intervalSeconds, setIntervalSeconds] = useState(60);
-  const [retries, setRetries] = useState(0);
-  const [tags, setTags] = useState('');
+  const notifications = useStore((s) => s.notifications);
+  const fetchNotifications = useStore((s) => s.fetchNotifications);
+  const upsertMonitor = useStore((s) => s.upsertMonitor);
+
+  const [loading, setLoading] = useState(!!editId);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<monitorsApi.Monitor | null>(null);
 
-  // Type-specific config
+  const [type, setType] = useState<MonitorType>('http');
+  const [name, setName] = useState('');
+  const [intervalSeconds, setIntervalSeconds] = useState(60);
+  const [retries, setRetries] = useState(1);
+  const [tags, setTags] = useState('');
+  const [notificationIds, setNotificationIds] = useState<string[]>([]);
+
+  // HTTP
   const [url, setUrl] = useState('');
   const [method, setMethod] = useState('GET');
   const [statusCodeMin, setStatusCodeMin] = useState(200);
   const [statusCodeMax, setStatusCodeMax] = useState(299);
   const [keyword, setKeyword] = useState('');
-  const [timeoutMs, setTimeoutMs] = useState(15000);
+  const [invertKeyword, setInvertKeyword] = useState(false);
+  const [jsonPath, setJsonPath] = useState('');
+  const [jsonPathExpected, setJsonPathExpected] = useState('');
+  const [timeoutMs, setTimeoutMs] = useState(30000);
+  const [ignoreTls, setIgnoreTls] = useState(false);
+  const [followRedirects, setFollowRedirects] = useState(true);
+  const [basicAuthUser, setBasicAuthUser] = useState('');
+  const [basicAuthPass, setBasicAuthPass] = useState('');
+  const [headersJson, setHeadersJson] = useState('');
+  const [body, setBody] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const [tcpHost, setTcpHost] = useState('');
-  const [tcpPort, setTcpPort] = useState(80);
-  const [tcpTimeout, setTcpTimeout] = useState(5000);
-
-  const [pingHost, setPingHost] = useState('');
-
-  const [dnsHost, setDnsHost] = useState('');
+  // Host-based
+  const [host, setHost] = useState('');
+  const [port, setPort] = useState(80);
+  const [tcpTimeout, setTcpTimeout] = useState(10000);
+  const [pingCount, setPingCount] = useState(3);
   const [dnsRecordType, setDnsRecordType] = useState('A');
   const [dnsExpected, setDnsExpected] = useState('');
-
-  const [sslHost, setSslHost] = useState('');
+  const [dnsResolver, setDnsResolver] = useState('');
   const [sslPort, setSslPort] = useState(443);
-  const [sslWarningDays, setSslWarningDays] = useState(30);
+  const [sslWarningDays, setSslWarningDays] = useState(14);
 
+  // Push
   const [pushGrace, setPushGrace] = useState(60);
+  const [pushToken, setPushToken] = useState<string | null>(null);
 
-  // Load existing monitor data when editing
+  useEffect(() => { void fetchNotifications(); }, [fetchNotifications]);
+
   useEffect(() => {
     if (!editId) return;
-    setLoading(true);
     monitorsApi.getMonitor(editId).then((m) => {
-      if (!m) return;
       setName(m.name);
-      setType(m.type as typeof type);
+      setType(m.type);
       setIntervalSeconds(m.intervalSeconds);
       setRetries(m.retries);
       setTags(m.tags.join(', '));
+      setNotificationIds(m.notificationIds ?? []);
 
-      const cfg = extractConfigData(m.config as Record<string, unknown>);
-
+      const cfg = monitorsApi.monitorConfig(m);
+      const str = (k: string, d = '') => (cfg[k] as string | undefined) ?? d;
+      const num = (k: string, d: number) => (cfg[k] as number | undefined) ?? d;
       switch (m.type) {
         case 'http':
-          setUrl((cfg.url as string) || '');
-          setMethod((cfg.method as string) || 'GET');
-          setStatusCodeMin((cfg.statusCodeMin as number) ?? 200);
-          setStatusCodeMax((cfg.statusCodeMax as number) ?? 299);
-          setKeyword((cfg.keyword as string) || '');
-          setTimeoutMs((cfg.timeoutMs as number) ?? 15000);
+          setUrl(str('url'));
+          setMethod(str('method', 'GET'));
+          setStatusCodeMin(num('statusCodeMin', 200));
+          setStatusCodeMax(num('statusCodeMax', 299));
+          setKeyword(str('keyword'));
+          setInvertKeyword(Boolean(cfg['invertKeyword']));
+          setJsonPath(str('jsonPath'));
+          setJsonPathExpected(str('jsonPathExpected'));
+          setTimeoutMs(num('timeoutMs', 30000));
+          setIgnoreTls(Boolean(cfg['ignoreTls']));
+          setFollowRedirects(cfg['followRedirects'] !== false);
+          setBasicAuthUser(str('basicAuthUser'));
+          setBasicAuthPass(str('basicAuthPass'));
+          setHeadersJson(cfg['headers'] ? JSON.stringify(cfg['headers'], null, 2) : '');
+          setBody(str('body'));
+          if (cfg['keyword'] || cfg['jsonPath'] || cfg['basicAuthUser'] || cfg['headers'] || cfg['body']) setShowAdvanced(true);
           break;
         case 'tcp':
-          setTcpHost((cfg.host as string) || '');
-          setTcpPort((cfg.port as number) ?? 80);
-          setTcpTimeout((cfg.timeoutMs as number) ?? 5000);
+          setHost(str('host')); setPort(num('port', 80)); setTcpTimeout(num('timeoutMs', 10000));
           break;
         case 'ping':
-          setPingHost((cfg.host as string) || '');
+          setHost(str('host')); setPingCount(num('count', 3));
           break;
         case 'dns':
-          setDnsHost((cfg.host as string) || '');
-          setDnsRecordType((cfg.recordType as string) || 'A');
-          setDnsExpected((cfg.expectedValue as string) || '');
+          setHost(str('host')); setDnsRecordType(str('recordType', 'A')); setDnsExpected(str('expectedValue')); setDnsResolver(str('resolver'));
           break;
         case 'ssl':
-          setSslHost((cfg.host as string) || '');
-          setSslPort((cfg.port as number) ?? 443);
-          setSslWarningDays((cfg.warningDays as number) ?? 30);
+          setHost(str('host')); setSslPort(num('port', 443)); setSslWarningDays(num('warningDays', 14));
           break;
         case 'push':
-          setPushGrace((cfg.graceSeconds as number) ?? 60);
+          setPushGrace(num('graceSeconds', 60)); setPushToken(str('token') || null);
           break;
       }
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }).catch((err) => {
+      setError(err instanceof Error ? err.message : 'Monitor konnte nicht geladen werden');
+      setLoading(false);
+    });
   }, [editId]);
 
-  const buildConfig = () => {
+  const buildConfig = (): Record<string, unknown> => {
     switch (type) {
-      case 'http':
-        return { url: url || undefined, method, statusCodeMin, statusCodeMax, keyword: keyword || undefined, timeoutMs };
-      case 'tcp':
-        return { host: tcpHost, port: tcpPort, timeoutMs: tcpTimeout };
-      case 'ping':
-        return { host: pingHost, count: 2 };
-      case 'dns':
-        return { host: dnsHost, recordType: dnsRecordType, expectedValue: dnsExpected || undefined };
-      case 'ssl':
-        return { host: sslHost, port: sslPort, warningDays: sslWarningDays };
-      case 'push':
-        return { graceSeconds: pushGrace };
+      case 'http': {
+        let headers: Record<string, string> | undefined;
+        if (headersJson.trim()) {
+          const parsed = JSON.parse(headersJson) as unknown;
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Header müssen ein JSON-Objekt sein, z.B. {"X-Token": "abc"}');
+          headers = Object.fromEntries(Object.entries(parsed as Record<string, unknown>).map(([k, v]) => [k, String(v)]));
+        }
+        return {
+          url: url.trim(), method, statusCodeMin, statusCodeMax, timeoutMs,
+          keyword: keyword || undefined, invertKeyword: keyword ? invertKeyword : undefined,
+          jsonPath: jsonPath || undefined, jsonPathExpected: jsonPath && jsonPathExpected ? jsonPathExpected : undefined,
+          ignoreTls, followRedirects,
+          basicAuthUser: basicAuthUser || undefined, basicAuthPass: basicAuthUser ? basicAuthPass : undefined,
+          headers, body: body || undefined,
+        };
+      }
+      case 'tcp': return { host: host.trim(), port, timeoutMs: tcpTimeout };
+      case 'ping': return { host: host.trim(), count: pingCount };
+      case 'dns': return { host: host.trim(), recordType: dnsRecordType, expectedValue: dnsExpected || undefined, resolver: dnsResolver.trim() || undefined };
+      case 'ssl': return { host: host.trim(), port: sslPort, warningDays: sslWarningDays };
+      case 'push': return { graceSeconds: pushGrace, ...(pushToken ? { token: pushToken } : {}) };
     }
   };
 
@@ -130,215 +173,249 @@ export default function MonitorForm({ onClose, editId }: MonitorFormProps) {
     setSaving(true);
     setError(null);
     try {
-      const payload = {
+      const payload: monitorsApi.MonitorInput = {
         name: name.trim(),
         type,
-        config: buildConfig() as Record<string, unknown>,
+        config: buildConfig(),
         intervalSeconds,
         retries,
-        tags: tags ? tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+        tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+        notificationIds,
       };
-      if (editId) {
-        await monitorsApi.updateMonitor(editId, payload as any);
-      } else {
-        await monitorsApi.createMonitor(payload as any);
+      const saved = editId ? await monitorsApi.updateMonitor(editId, payload) : await monitorsApi.createMonitor(payload);
+      upsertMonitor(saved);
+      if (!editId && saved.type === 'push') {
+        // Show the generated push URL before closing
+        setCreated(saved);
+        return;
       }
-      await fetchMonitors();
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : (editId ? 'Fehler beim Speichern' : 'Fehler beim Erstellen'));
+      setError(err instanceof Error ? err.message : 'Speichern fehlgeschlagen');
     } finally {
       setSaving(false);
     }
   };
 
-  if (loading) {
+  const toggleNotification = (id: string) =>
+    setNotificationIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+
+  const header = (
+    <div className="flex items-center justify-between mb-5">
+      <h2 className="text-[1.15rem] font-semibold m-0" style={{ color: 'var(--color-text)' }}>
+        {editId ? 'Monitor bearbeiten' : 'Neuen Monitor erstellen'}
+      </h2>
+      <button type="button" onClick={onClose} className="btn btn-icon" aria-label="Schließen">
+        <X className="w-[16px] h-[16px]" />
+      </button>
+    </div>
+  );
+
+  if (created) {
+    const token = (monitorsApi.monitorConfig(created)['token'] as string) ?? '';
     return (
-      <div className="fixed inset-0 z-50 flex items-start justify-center pt-[60px]" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
-        <div className="w-full max-w-[560px] border rounded-[var(--radius-lg)] p-6 text-center" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-          <div className="w-8 h-8 border-2 rounded-full animate-spin mx-auto" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
-          <p className="mt-3 text-[0.9rem]" style={{ color: 'var(--color-text-muted)' }}>Lade Monitordaten…</p>
+      <div className="modal-backdrop" onClick={onClose}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          {header}
+          <div className="alert alert-ok mb-4">Push-Monitor „{created.name}“ wurde erstellt.</div>
+          <Field label="Push-URL" hint="Rufe diese URL regelmäßig auf (GET oder POST), z.B. per Cronjob: curl -fsS '<URL>'. Optional: status=down, msg=…, ping=…">
+            <CopyField value={pushUrl(token)} />
+          </Field>
+          <div className="flex justify-end mt-5">
+            <button className="btn btn-primary" onClick={onClose}>Fertig</button>
+          </div>
         </div>
       </div>
     );
   }
 
-  const inputStyle = { background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' } as React.CSSProperties;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-[60px]" style={{ background: 'rgba(0,0,0,0.6)' }} onClick={onClose}>
-      <div className="w-full max-w-[560px] max-h-[80vh] overflow-y-auto border rounded-[var(--radius-lg)] p-6" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-[1.15rem] font-semibold m-0" style={{ color: 'var(--color-text)' }}>
-            {editId ? 'Monitor bearbeiten' : 'Neuen Monitor erstellen'}
-          </h2>
-          <button onClick={onClose} className="w-[34px] h-[34px] rounded-[8px] grid place-items-center border cursor-pointer" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-dim)', background: 'transparent' }}>
-            <X className="w-[16px] h-[16px]" />
-          </button>
-        </div>
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        {header}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {/* Name */}
-          <div>
-            <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Name *</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} required className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none focus:border-[var(--color-primary)]" style={inputStyle} placeholder="z.B. Meine Webseite" />
+        {loading ? (
+          <div className="py-10 grid place-items-center">
+            <div className="w-8 h-8 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--color-primary)', borderTopColor: 'transparent' }} />
           </div>
-
-          {/* Type (disabled when editing — changing type would break config) */}
-          <div>
-            <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Typ</label>
-            <div className="grid grid-cols-3 gap-2">
-              {MONITOR_TYPES.map((t) => (
-                <button key={t.value} type="button" onClick={() => !editId && setType(t.value as typeof type)}
-                  disabled={!!editId}
-                  className="px-3 py-[10px] rounded-[var(--radius-sm)] border text-[0.85rem] font-medium transition-colors"
-                  style={{
-                    background: type === t.value ? 'var(--color-primary-soft)' : 'var(--color-bg)',
-                    borderColor: type === t.value ? 'var(--color-primary)' : 'var(--color-border)',
-                    color: type === t.value ? 'var(--color-primary)' : 'var(--color-text-muted)',
-                    opacity: editId && type !== t.value ? 0.5 : 1,
-                    cursor: editId ? 'default' : 'pointer',
-                  }}
-                >{t.label}</button>
-              ))}
-            </div>
-          </div>
-
-          {/* Type-specific fields */}
-          {type === 'http' && (
-            <>
-              <div>
-                <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>URL *</label>
-                <input value={url} onChange={(e) => setUrl(e.target.value)} required className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} placeholder="https://example.com" />
+        ) : (
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <Field label="Typ">
+              <div className="grid grid-cols-3 gap-2">
+                {MONITOR_TYPES.map((t) => (
+                  <button key={t.value} type="button" onClick={() => !editId && setType(t.value)}
+                    disabled={!!editId && type !== t.value}
+                    className={`chip ${type === t.value ? 'active' : ''}`}
+                    style={{ borderRadius: 'var(--radius-sm)', fontFamily: 'inherit', fontWeight: 500, cursor: editId ? 'default' : 'pointer', opacity: editId && type !== t.value ? 0.45 : 1 }}
+                  >{t.label}</button>
+                ))}
               </div>
+            </Field>
+
+            <Field label="Name *">
+              <input value={name} onChange={(e) => setName(e.target.value)} required maxLength={200} className="input" placeholder="z.B. Meine Webseite" autoFocus={!editId} />
+            </Field>
+
+            {type === 'http' && (
+              <>
+                <Field label="URL *">
+                  <input type="url" value={url} onChange={(e) => setUrl(e.target.value)} required className="input mono" placeholder="https://example.com/health" />
+                </Field>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <Field label="Methode">
+                    <select value={method} onChange={(e) => setMethod(e.target.value)} className="input">
+                      {['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => <option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </Field>
+                  <Field label="Status min">
+                    <input type="number" min={100} max={599} value={statusCodeMin} onChange={(e) => setStatusCodeMin(Number(e.target.value))} className="input mono" />
+                  </Field>
+                  <Field label="Status max">
+                    <input type="number" min={100} max={599} value={statusCodeMax} onChange={(e) => setStatusCodeMax(Number(e.target.value))} className="input mono" />
+                  </Field>
+                  <Field label="Timeout (s)">
+                    <input type="number" min={1} max={120} value={Math.round(timeoutMs / 1000)} onChange={(e) => setTimeoutMs(Math.max(1, Number(e.target.value)) * 1000)} className="input mono" />
+                  </Field>
+                </div>
+                <div className="flex flex-wrap gap-x-6 gap-y-2">
+                  <label className="check"><input type="checkbox" checked={ignoreTls} onChange={(e) => setIgnoreTls(e.target.checked)} /> TLS-Fehler ignorieren (self-signed)</label>
+                  <label className="check"><input type="checkbox" checked={followRedirects} onChange={(e) => setFollowRedirects(e.target.checked)} /> Redirects folgen</label>
+                </div>
+                <button type="button" className="btn btn-sm self-start" onClick={() => setShowAdvanced((v) => !v)}>
+                  {showAdvanced ? '− Erweiterte Optionen' : '+ Erweiterte Optionen (Keyword, JSON, Auth, Header)'}
+                </button>
+                {showAdvanced && (
+                  <div className="flex flex-col gap-4 p-4 rounded-[var(--radius-box)]" style={{ background: 'var(--color-bg-soft)', border: '1px solid var(--color-border)' }}>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <Field label="Keyword im Body">
+                        <input value={keyword} onChange={(e) => setKeyword(e.target.value)} className="input mono" placeholder="z.B. OK" />
+                      </Field>
+                      <div className="flex items-end pb-3">
+                        <label className="check"><input type="checkbox" checked={invertKeyword} disabled={!keyword} onChange={(e) => setInvertKeyword(e.target.checked)} /> Invertieren (DOWN wenn gefunden)</label>
+                      </div>
+                      <Field label="JSONPath" hint="z.B. $.status oder $.data[0].ok">
+                        <input value={jsonPath} onChange={(e) => setJsonPath(e.target.value)} className="input mono" placeholder="$.status" />
+                      </Field>
+                      <Field label="Erwarteter Wert (optional)">
+                        <input value={jsonPathExpected} onChange={(e) => setJsonPathExpected(e.target.value)} disabled={!jsonPath} className="input mono" placeholder="ok" />
+                      </Field>
+                      <Field label="Basic-Auth Benutzer">
+                        <input value={basicAuthUser} onChange={(e) => setBasicAuthUser(e.target.value)} className="input" autoComplete="off" />
+                      </Field>
+                      <Field label="Basic-Auth Passwort">
+                        <input type="password" value={basicAuthPass} onChange={(e) => setBasicAuthPass(e.target.value)} className="input" autoComplete="new-password" />
+                      </Field>
+                    </div>
+                    <Field label="Header (JSON)">
+                      <textarea value={headersJson} onChange={(e) => setHeadersJson(e.target.value)} className="input mono" rows={3} placeholder='{"Authorization": "Bearer …"}' />
+                    </Field>
+                    {!['GET', 'HEAD'].includes(method) && (
+                      <Field label="Body">
+                        <textarea value={body} onChange={(e) => setBody(e.target.value)} className="input mono" rows={3} />
+                      </Field>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {(type === 'tcp' || type === 'ping' || type === 'dns' || type === 'ssl') && (
+              <Field label="Host *">
+                <input value={host} onChange={(e) => setHost(e.target.value)} required className="input mono" placeholder={type === 'ping' || type === 'tcp' ? '192.168.1.10 oder server.lan' : 'example.com'} />
+              </Field>
+            )}
+
+            {type === 'tcp' && (
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Methode</label>
-                  <select value={method} onChange={(e) => setMethod(e.target.value)} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none" style={inputStyle}>
-                    {['GET', 'POST', 'HEAD', 'PUT', 'PATCH', 'DELETE'].map((m) => (<option key={m} value={m}>{m}</option>))}
+                <Field label="Port *">
+                  <input type="number" min={1} max={65535} value={port} onChange={(e) => setPort(Number(e.target.value))} required className="input mono" />
+                </Field>
+                <Field label="Timeout (s)">
+                  <input type="number" min={1} max={120} value={Math.round(tcpTimeout / 1000)} onChange={(e) => setTcpTimeout(Math.max(1, Number(e.target.value)) * 1000)} className="input mono" />
+                </Field>
+              </div>
+            )}
+
+            {type === 'ping' && (
+              <Field label="Pakete pro Check">
+                <input type="number" min={1} max={10} value={pingCount} onChange={(e) => setPingCount(Number(e.target.value))} className="input mono" />
+              </Field>
+            )}
+
+            {type === 'dns' && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <Field label="Record-Typ">
+                  <select value={dnsRecordType} onChange={(e) => setDnsRecordType(e.target.value)} className="input">
+                    {['A', 'AAAA', 'CNAME', 'MX', 'TXT'].map((t) => <option key={t}>{t}</option>)}
                   </select>
-                </div>
-                <div>
-                  <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Keyword (optional)</label>
-                  <input value={keyword} onChange={(e) => setKeyword(e.target.value)} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} placeholder="z.B. Welcome" />
-                </div>
+                </Field>
+                <Field label="Erwarteter Wert">
+                  <input value={dnsExpected} onChange={(e) => setDnsExpected(e.target.value)} className="input mono" placeholder="optional" />
+                </Field>
+                <Field label="DNS-Server">
+                  <input value={dnsResolver} onChange={(e) => setDnsResolver(e.target.value)} className="input mono" placeholder="z.B. 1.1.1.1" />
+                </Field>
               </div>
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Status Min</label>
-                  <input type="number" value={statusCodeMin} onChange={(e) => setStatusCodeMin(Number(e.target.value))} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-                </div>
-                <div>
-                  <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Status Max</label>
-                  <input type="number" value={statusCodeMax} onChange={(e) => setStatusCodeMax(Number(e.target.value))} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-                </div>
-                <div>
-                  <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Timeout (ms)</label>
-                  <input type="number" value={timeoutMs} onChange={(e) => setTimeoutMs(Math.max(1000, Number(e.target.value)))} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-                </div>
-              </div>
-            </>
-          )}
+            )}
 
-          {type === 'tcp' && (
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Host *</label>
-                <input value={tcpHost} onChange={(e) => setTcpHost(e.target.value)} required className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} placeholder="localhost" />
-              </div>
-              <div>
-                <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Port *</label>
-                <input type="number" value={tcpPort} onChange={(e) => setTcpPort(Number(e.target.value))} required className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-              </div>
-              <div>
-                <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Timeout (ms)</label>
-                <input type="number" value={tcpTimeout} onChange={(e) => setTcpTimeout(Math.max(1000, Number(e.target.value)))} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-              </div>
-            </div>
-          )}
-
-          {type === 'ping' && (
-            <div>
-              <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Host *</label>
-              <input value={pingHost} onChange={(e) => setPingHost(e.target.value)} required className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} placeholder="8.8.8.8" />
-            </div>
-          )}
-
-          {type === 'dns' && (
-            <>
-              <div>
-                <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Host *</label>
-                <input value={dnsHost} onChange={(e) => setDnsHost(e.target.value)} required className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} placeholder="example.com" />
-              </div>
+            {type === 'ssl' && (
               <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Record-Typ</label>
-                  <select value={dnsRecordType} onChange={(e) => setDnsRecordType(e.target.value)} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none" style={inputStyle}>
-                    {['A', 'AAAA', 'CNAME', 'MX', 'TXT'].map((t) => (<option key={t}>{t}</option>))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Erwarteter Wert</label>
-                  <input value={dnsExpected} onChange={(e) => setDnsExpected(e.target.value)} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-                </div>
+                <Field label="Port">
+                  <input type="number" min={1} max={65535} value={sslPort} onChange={(e) => setSslPort(Number(e.target.value))} className="input mono" />
+                </Field>
+                <Field label="Warnung ab (Tage)" hint="Status „eingeschränkt“ wenn das Zertifikat bald abläuft">
+                  <input type="number" min={0} max={365} value={sslWarningDays} onChange={(e) => setSslWarningDays(Number(e.target.value))} className="input mono" />
+                </Field>
               </div>
-            </>
-          )}
+            )}
 
-          {type === 'ssl' && (
+            {type === 'push' && (
+              <>
+                <Field label="Grace-Periode (Sekunden)" hint="Kommt innerhalb von Intervall + Grace kein Push, wird der Monitor DOWN.">
+                  <input type="number" min={0} value={pushGrace} onChange={(e) => setPushGrace(Math.max(0, Number(e.target.value)))} className="input mono" />
+                </Field>
+                {pushToken
+                  ? <Field label="Push-URL"><CopyField value={pushUrl(pushToken)} /></Field>
+                  : <p className="hint m-0">Die Push-URL wird nach dem Erstellen angezeigt.</p>}
+              </>
+            )}
+
             <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Host *</label>
-                <input value={sslHost} onChange={(e) => setSslHost(e.target.value)} required className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} placeholder="example.com" />
-              </div>
-              <div>
-                <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Port</label>
-                <input type="number" value={sslPort} onChange={(e) => setSslPort(Number(e.target.value))} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-              </div>
-              <div>
-                <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Warnung (Tage)</label>
-                <input type="number" value={sslWarningDays} onChange={(e) => setSslWarningDays(Number(e.target.value))} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-              </div>
+              <Field label="Intervall (s)">
+                <input type="number" min={20} value={intervalSeconds} onChange={(e) => setIntervalSeconds(Number(e.target.value))} onBlur={() => setIntervalSeconds((v) => Math.max(20, v || 60))} className="input mono" />
+              </Field>
+              <Field label="Wiederholungen" hint="vor DOWN">
+                <input type="number" min={0} max={10} value={retries} onChange={(e) => setRetries(Math.min(10, Math.max(0, Number(e.target.value))))} className="input mono" disabled={type === 'push'} />
+              </Field>
+              <Field label="Tags">
+                <input value={tags} onChange={(e) => setTags(e.target.value)} className="input mono" placeholder="prod, web" />
+              </Field>
             </div>
-          )}
 
-          {type === 'push' && (
-            <div>
-              <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Grace-Periode (Sekunden)</label>
-              <input type="number" value={pushGrace} onChange={(e) => setPushGrace(Math.max(10, Number(e.target.value)))} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-              <p className="text-[0.75rem] mt-1" style={{ color: 'var(--color-text-dim)' }}>Nach Ablauf des Intervalls + Grace wird der Monitor als DOWN markiert.</p>
-            </div>
-          )}
+            <Field label="Benachrichtigungen">
+              {notifications.length === 0 ? (
+                <p className="hint m-0">Noch keine Benachrichtigungen eingerichtet (Menü „Benachrichtigungen“).</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {notifications.map((n) => (
+                    <button key={n.id} type="button" onClick={() => toggleNotification(n.id)} className={`chip ${notificationIds.includes(n.id) ? 'active' : ''}`}>
+                      {n.name} <span style={{ opacity: 0.6 }}>· {n.provider}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </Field>
 
-          {/* Interval + Retries + Tags */}
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Intervall (s)</label>
-              <input type="number" value={intervalSeconds} onChange={(e) => setIntervalSeconds(Math.max(20, Number(e.target.value)))} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-            </div>
-            <div>
-              <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Retries</label>
-              <input type="number" value={retries} onChange={(e) => setRetries(Math.max(0, Number(e.target.value)))} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} />
-            </div>
-            <div>
-              <label className="block text-[0.85rem] font-medium mb-[6px]" style={{ color: 'var(--color-text-muted)' }}>Tags (komma)</label>
-              <input value={tags} onChange={(e) => setTags(e.target.value)} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] outline-none font-mono focus:border-[var(--color-primary)]" style={inputStyle} placeholder="prod,web" />
-            </div>
-          </div>
+            {error && <div className="alert alert-error">{error}</div>}
 
-          {error && (
-            <div className="text-[0.85rem] p-3 rounded-[var(--radius-sm)]" style={{ color: 'var(--color-down)', background: 'var(--color-down-soft)' }}>
-              {error}
+            <div className="flex justify-end gap-3 mt-1">
+              <button type="button" onClick={onClose} className="btn">Abbrechen</button>
+              <button type="submit" disabled={saving} className="btn btn-primary">
+                {saving ? 'Wird gespeichert…' : editId ? 'Speichern' : 'Erstellen'}
+              </button>
             </div>
-          )}
-
-          <div className="flex justify-end gap-3 mt-2">
-            <button type="button" onClick={onClose} className="px-4 py-[10px] rounded-[var(--radius-box)] border cursor-pointer text-[0.9rem]" style={{ borderColor: 'var(--color-border-strong)', color: 'var(--color-text)', background: 'transparent' }}>Abbrechen</button>
-            <button type="submit" disabled={saving} className="px-4 py-[10px] rounded-[var(--radius-box)] border-0 cursor-pointer text-[0.9rem]" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-fg)' }}>
-              {saving ? 'Wird gespeichert…' : editId ? 'Speichern' : 'Erstellen'}
-            </button>
-          </div>
-        </form>
+          </form>
+        )}
       </div>
     </div>
   );

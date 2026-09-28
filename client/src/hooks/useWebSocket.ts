@@ -1,12 +1,18 @@
-import { useEffect, useRef, useCallback } from 'react';
-import { getAccessToken } from '../api/client';
+import { useEffect } from 'react';
+import { ensureFreshToken, getAccessToken, wsUrl } from '../api/client';
+import { useStore, type Heartbeat, type Monitor } from '../store/useStore';
 
-const WS_BASE = import.meta.env.VITE_WS_URL || 'ws://localhost:3001/ws';
+export interface WsMessage {
+  type: string;
+  payload: unknown;
+  timestamp: string;
+}
 
-type WsEventHandler = (event: { type: string; payload: unknown; timestamp: string }) => void;
+type WsEventHandler = (event: WsMessage) => void;
 
 const handlers = new Map<string, Set<WsEventHandler>>();
 
+/** Subscribe to a WS event type ('*' for all). Returns an unsubscribe function. */
 export function onWsEvent(type: string, handler: WsEventHandler): () => void {
   if (!handlers.has(type)) handlers.set(type, new Set());
   handlers.get(type)!.add(handler);
@@ -15,76 +21,101 @@ export function onWsEvent(type: string, handler: WsEventHandler): () => void {
   };
 }
 
-export function useWebSocket() {
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const backoffRef = useRef(1000);
-  const mountedRef = useRef(true);
+function dispatch(msg: WsMessage) {
+  handlers.get(msg.type)?.forEach((h) => h(msg));
+  handlers.get('*')?.forEach((h) => h(msg));
+}
 
-  const connect = useCallback(() => {
-    if (!mountedRef.current) return;
+/** Apply engine events to the global store */
+function applyToStore(msg: WsMessage) {
+  const s = useStore.getState();
+  switch (msg.type) {
+    case 'heartbeat:new': {
+      const p = msg.payload as { monitorId: string; heartbeat: Heartbeat };
+      s.applyHeartbeat(p.monitorId, p.heartbeat);
+      break;
+    }
+    case 'monitor:status-change': {
+      const p = msg.payload as { monitorId: string; newStatus: Monitor['status'] };
+      s.applyStatusChange(p.monitorId, p.newStatus);
+      break;
+    }
+    case 'monitor:created':
+    case 'monitor:updated':
+      s.upsertMonitor(msg.payload as Monitor);
+      break;
+    case 'monitor:deleted':
+      s.removeMonitor((msg.payload as { id: string }).id);
+      break;
+  }
+}
 
-    const token = getAccessToken();
-    const url = token ? `${WS_BASE}?token=${token}` : WS_BASE;
+/**
+ * Maintains the authenticated WebSocket connection while logged in.
+ * Reconnects with exponential backoff and refreshes the access token when
+ * the server rejects it.
+ */
+export function useWebSocket(enabled: boolean) {
+  useEffect(() => {
+    if (!enabled) return;
 
-    try {
-      const ws = new WebSocket(url);
+    let ws: WebSocket | null = null;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let backoff = 1000;
+    let stopped = false;
+    let hadConnection = false;
+
+    const scheduleReconnect = () => {
+      if (stopped) return;
+      timer = setTimeout(connect, backoff);
+      backoff = Math.min(backoff * 2, 30000);
+    };
+
+    function connect() {
+      if (stopped) return;
+      const token = getAccessToken();
+      if (!token) return;
+
+      ws = new WebSocket(`${wsUrl()}?token=${encodeURIComponent(token)}`);
 
       ws.onopen = () => {
-        backoffRef.current = 1000; // Reset backoff on successful connection
+        backoff = 1000;
+        // Resync after a reconnect (events may have been missed)
+        if (hadConnection) void useStore.getState().fetchMonitors();
+        hadConnection = true;
       };
 
       ws.onmessage = (event) => {
         try {
-          const data = JSON.parse(event.data);
-          const typeHandlers = handlers.get(data.type);
-          if (typeHandlers) {
-            typeHandlers.forEach((h) => h(data));
-          }
-          // Also dispatch to wildcard handlers
-          const wildcardHandlers = handlers.get('*');
-          if (wildcardHandlers) {
-            wildcardHandlers.forEach((h) => h(data));
-          }
-        } catch {
-          // Ignore parse errors
+          const msg = JSON.parse(event.data as string) as WsMessage;
+          applyToStore(msg);
+          dispatch(msg);
+        } catch { /* ignore malformed */ }
+      };
+
+      ws.onclose = (ev) => {
+        ws = null;
+        if (stopped) return;
+        if (ev.code === 4001) {
+          // Token expired → refresh, then reconnect
+          void ensureFreshToken().then((ok) => (ok ? scheduleReconnect() : undefined));
+          return;
         }
+        scheduleReconnect();
       };
 
-      ws.onclose = () => {
-        if (mountedRef.current) {
-          // Reconnect with exponential backoff
-          const delay = backoffRef.current;
-          backoffRef.current = Math.min(backoffRef.current * 2, 30000);
-          reconnectTimeoutRef.current = setTimeout(connect, delay);
-        }
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
-
-      wsRef.current = ws;
-    } catch {
-      // Connection failed, retry
-      if (mountedRef.current) {
-        reconnectTimeoutRef.current = setTimeout(connect, backoffRef.current);
-        backoffRef.current = Math.min(backoffRef.current * 2, 30000);
-      }
+      ws.onerror = () => ws?.close();
     }
-  }, []);
 
-  useEffect(() => {
-    mountedRef.current = true;
     connect();
 
     return () => {
-      mountedRef.current = false;
-      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
-      if (wsRef.current) {
-        wsRef.current.onclose = null; // Prevent reconnect on intentional close
-        wsRef.current.close();
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
       }
     };
-  }, [connect]);
+  }, [enabled]);
 }

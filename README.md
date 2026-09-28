@@ -1,6 +1,6 @@
 # Helio BETA — Self-hosted Uptime & Container Monitoring
 
-![Version](https://img.shields.io/badge/version-2.1.0-2EE0CE)
+![Version](https://img.shields.io/badge/version-2.2.0-2EE0CE)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -8,7 +8,7 @@
 
 Helio ist eine moderne, **produktionsreife**, selbst-gehostete Monitoring-Plattform — Alternative zu **Uptime Kuma** und **Grafana** — mit Fokus auf saubere REST-API, erweiterbare Checker-Architektur, WebSocket-Live-Updates, **Proxmox Container-Monitoring** und ein Dark-First Dashboard. Ideal für Homelab-Betreiber, DevOps-Teams und Self-Hoster.
 
-> **v2.1.0** — Production-Ready Release mit Security-Hardening, Observability, Deployment-Verbesserungen und Bugfixes. [Changelog](CHANGELOG.md)
+> **v2.2.0** — Stabilisierung: korrekte Status-Engine, Heartbeat-Balken & öffentliche Status-Seiten wie Uptime Kuma, Erst-Einrichtung statt offener Registrierung, 2FA-Login, Benutzerverwaltung, funktionierender Docker-Build. [Changelog](CHANGELOG.md)
 
 <img width="1661" height="709" alt="image" src="https://github.com/user-attachments/assets/2b5792d8-c8c9-4b1f-bf2d-84156a1243d7" />
 
@@ -38,7 +38,7 @@ Helio ist eine moderne, **produktionsreife**, selbst-gehostete Monitoring-Plattf
 | **Ping (ICMP)** | System-`ping`, Fallback TCP Echo |
 | **DNS** | A/AAAA/CNAME/MX/TXT, erwarteter Wert, eigener Resolver |
 | **SSL/TLS** | Zertifikats-Ablauf, Warning-Schwellwert → DEGRADED |
-| **Push (Heartbeat)** | Token-URL, Grace-Period, **persistiert in SQLite** |
+| **Push (Heartbeat)** | Token-URL (Uptime-Kuma-kompatibel: `?status=up|down&msg=&ping=`), Grace-Period |
 
 ### 🐳 Proxmox Container-Monitoring
 - **Live-Polling** aller LXC-Container und QEMU-VMs via Proxmox VE API
@@ -60,10 +60,12 @@ Mehrere Benachrichtigungen pro Monitor zuweisbar: **Webhook**, **Telegram**, **D
 
 ### 🛡️ Sicherheit
 - **Helmet.js** Sicherheits-Header (XSS, Clickjacking, MIME-Sniffing)
-- **Rate-Limiting** für Auth-Endpunkte (10 Versuche/15min)
+- **Erst-Einrichtung** statt offener Registrierung — weitere Benutzer legt ein Admin an
+- **Rollen**: Administrator (Vollzugriff) / Betrachter (nur lesen)
+- **Rate-Limiting** für Login (20 Fehlversuche/15min) und API
 - **API-Key Auth** mit SHA256-Hashing + Scope-Prüfung
-- **TOTP-2FA** via Authenticator-App
-- **SSRF-Schutz** für alle Notification-Provider
+- **TOTP-2FA** via Authenticator-App (wird beim Login erzwungen)
+- **SSRF-Schutz** für Notification-Provider (abschaltbar für LAN-Ziele: `NOTIFICATION_ALLOW_PRIVATE=true`)
 - **Shell-Injection-Schutz** im PingChecker
 - **Proxmox-Passwort-Verschlüsselung** (AES-256-GCM)
 - **Non-Root Docker** Container
@@ -77,14 +79,17 @@ Mehrere Benachrichtigungen pro Monitor zuweisbar: **Webhook**, **Telegram**, **D
 - Request-Logging mit Dauer, Status-Code, Pfad
 
 ### 🎨 Dashboard
-- **Übersicht** — Live-KPIs, Latenz-Chart, Alert-Feed, Monitor-Tabelle
+- **Übersicht** — Live-KPIs, Latenz-Chart, Alert-Feed, Monitor-Tabelle mit **Heartbeat-Balken** (Live via WebSocket)
 - **Monitor-Detail** — Latenz-Chart (Canvas), Uptime-%, Heartbeat-Tabelle, Pause/Resume/Edit/Delete
 - **Monitor-Formular** — Dynamisch je nach Typ, Editieren bestehender Monitore
 - **Container** — Proxmox-Dashboard mit CPU/RAM/Disk/Ping-Tabelle und Metric-Tabs
 - **Benachrichtigungen** — CRUD + Test + Edit, Monitor-Zuweisung
-- **Status-Pages** — Öffentliche Seiten ohne Auth, Monitor-Auswahl
+- **Status-Pages** — Öffentliche Seiten unter `/status/<slug>` ohne Login (Heartbeat-Balken, Uptime, Wartungshinweise)
+- **Alerts** — Aktive Probleme + Ereignis-Historie (Statuswechsel)
+- **Wartung** — Wartungsfenster planen (keine Checks/Alarme)
+- **Team** — Benutzer anlegen, Rollen ändern, löschen
 - **Metriken** — Uptime-Tabelle (24h/7d/30d)
-- **Einstellungen** — Profil, TOTP-2FA, API-Keys, Aufbewahrung
+- **Einstellungen** — Profil & Passwort, TOTP-2FA, API-Keys, Server-Konfiguration
 - **Dark/Light-Mode** — Umschaltbar, persistiert
 
 ---
@@ -114,7 +119,7 @@ helio/
 │   └── src/
 │       ├── api/          → Typisierte API-Clients
 │       ├── components/   → 20+ UI-Komponenten
-│       ├── hooks/        → useWebSocket, useChartLiveUpdates
+│       ├── hooks/        → useWebSocket (Live-Updates in den Store)
 │       ├── store/        → Zustand (Auth, Theme, View-Routing, API-Data)
 │       └── utils/        → Canvas-Chart-Engine (retina)
 │
@@ -129,28 +134,29 @@ helio/
 
 ## Quick Start
 
-### Mit Docker (Entwicklung)
+### Mit Docker (empfohlen)
 ```bash
-git clone https://github.com/naix1337/helio-v2.git
-cd helio
-docker compose up -d
-# http://localhost:3001
+git clone https://github.com/naix1337/Helio-BETA.git
+cd Helio-BETA
+docker compose up -d --build
+# → http://localhost:3001 — beim ersten Aufruf Admin-Account anlegen
 ```
 
-### Ohne Docker
+### Ohne Docker (Node.js ≥ 20)
 ```bash
 npm install
-npm run seed              # Demo-Daten + Admin
-npm run dev:server        # → http://localhost:3001
-# Terminal 2:
-npm run dev:client        # → http://localhost:5173 (optional)
+npm run build             # Client + Server bauen
+npm start                 # → http://localhost:3001
 ```
 
-### Demo-Zugang
+### Entwicklung
+```bash
+npm install
+npm run dev:server        # API + Engine → http://localhost:3001
+npm run dev:client        # Vite mit Proxy → http://localhost:5173
+npm test                  # API-Tests (Server)
 ```
-E-Mail:    admin@helio.local
-Passwort:  admin123
-```
+Optional Demo-Daten: `npm run seed` (legt `admin@helio.local` / `admin12345` an).
 
 ---
 
@@ -208,14 +214,17 @@ curl http://localhost:3001/api/v1/health
 | `HOST` | `0.0.0.0` | Server-Host |
 | `LOG_LEVEL` | `info` | Pino-Loglevel (debug/info/warn/error) |
 | `DB_PATH` | `./helio.db` | SQLite-Datenbank |
-| `JWT_SECRET` | (random) | JWT-Secret (in Produktion **zwingend setzen**) |
+| `JWT_SECRET` | (generiert) | JWT-/Verschlüsselungs-Secret. Ohne Angabe wird eins erzeugt und neben der DB in `.helio-secret` gespeichert |
 | `JWT_ACCESS_EXPIRY` | `15m` | Access-Token-Laufzeit |
 | `JWT_REFRESH_EXPIRY` | `7d` | Refresh-Token-Laufzeit |
-| `CORS_ORIGIN` | `*` | CORS (Produktion auf Domain beschränken) |
+| `CORS_ORIGIN` | `*` | CORS (nur nötig, wenn Frontend auf anderer Domain läuft) |
+| `TRUST_PROXY` | – | Hinter Reverse-Proxy auf `1` setzen (echte Client-IPs fürs Rate-Limit) |
+| `API_RATE_LIMIT` | `600` | API-Requests pro Minute und IP |
+| `NOTIFICATION_ALLOW_PRIVATE` | `false` | Webhook/ntfy-Ziele im LAN erlauben (Docker-Quickstart: `true`) |
 | `RETENTION_RAW_DAYS` | `7` | Heartbeat-Aufbewahrung |
 | `NTFY_DEFAULT_SERVER` | `https://ntfy.sh` | Default ntfy-Server |
-| `BACKUP_ENABLED` | `true` | Automatische DB-Backups |
-| `BACKUP_DIR` | `/app/data/backups` | Backup-Verzeichnis |
+| `BACKUP_ENABLED` | `false` | Tägliche DB-Backups (SQLite Online-Backup) |
+| `BACKUP_DIR` | `<DB-Ordner>/backups` | Backup-Verzeichnis |
 | `BACKUP_RETENTION_DAYS` | `30` | Backup-Aufbewahrung |
 
 ---
@@ -224,26 +233,46 @@ curl http://localhost:3001/api/v1/health
 
 Alle Endpunkte sind unter `http(s)://dein-server:3001/api/v1` erreichbar.
 
+Lesende Endpunkte: jeder angemeldete Benutzer bzw. API-Key mit Scope `read`.
+Schreibende Endpunkte: nur Administratoren bzw. API-Keys (eines Admins) mit Scope `write`.
+
 ### Auth
 ```
-POST /api/v1/auth/register   { email, password }           → Rate Limited 10/15min
-POST /api/v1/auth/login      { email, password }           → Rate Limited 10/15min
+GET  /api/v1/auth/setup      → { needsSetup }  (öffentlich)
+POST /api/v1/auth/setup      { email, password }   → erster Admin, danach gesperrt
+POST /api/v1/auth/login      { email, password, totpToken? }
 POST /api/v1/auth/refresh    { refreshToken }
-POST /api/v1/auth/2fa/setup  (JWT)
-POST /api/v1/auth/2fa/verify { token }  (JWT)
-GET  /api/v1/auth/me         (JWT)
+POST /api/v1/auth/password   { currentPassword, newPassword }
+POST /api/v1/auth/2fa/setup | /2fa/verify { token } | /2fa/disable { token }
+GET  /api/v1/auth/me
+```
+
+### Benutzer (Admin)
+```
+GET    /api/v1/users
+POST   /api/v1/users         { email, password, role: "admin"|"user" }
+PATCH  /api/v1/users/:id     { role?, password? }
+DELETE /api/v1/users/:id
+```
+
+### Push (öffentlich, Uptime-Kuma-kompatibel)
+```
+GET|POST /api/push/:token?status=up|down&msg=OK&ping=123
 ```
 
 ### Monitore
 ```
 GET    /api/v1/monitors              (JWT/API-Key)
-POST   /api/v1/monitors              { name, type, config, intervalSeconds, tags }  (JWT)
+GET    /api/v1/monitors/beats?count=40   — letzte Heartbeats aller Monitore
+GET    /api/v1/monitors/events           — Statuswechsel (Ereignisse)
+POST   /api/v1/monitors              { name, type, config, intervalSeconds, retries, tags, notificationIds }
 GET    /api/v1/monitors/:id          (JWT/API-Key)
 PATCH  /api/v1/monitors/:id          { name?, config?, intervalSeconds?, … }  (JWT)
 DELETE /api/v1/monitors/:id          (JWT)
 POST   /api/v1/monitors/:id/pause    (JWT)
 POST   /api/v1/monitors/:id/resume   (JWT)
-GET    /api/v1/monitors/:id/heartbeats?range=24h|7d|30d  (JWT/API-Key)
+GET    /api/v1/monitors/:id/heartbeats?range=1h|6h|24h|7d|30d  (JWT/API-Key)
+POST   /api/v1/monitors/:id/check    — Check sofort ausführen (ohne Speichern)
 GET    /api/v1/monitors/:id/uptime   (JWT/API-Key)
 ```
 
@@ -263,13 +292,15 @@ GET    /api/v1/notifications           (JWT)
 POST   /api/v1/notifications           { name, provider, config, monitorIds }
 PATCH  /api/v1/notifications/:id       { name?, config?, monitorIds? }
 DELETE /api/v1/notifications/:id
-POST   /api/v1/notifications/:id/test  (JWT, Rate Limited 5/min)
+POST   /api/v1/notifications/:id/test  (Rate Limited 10/min)
+POST   /api/v1/notifications/test      { provider, config } — ungespeicherte Config testen
 ```
 
 ### Status-Pages
 ```
 GET    /api/v1/status-pages                  (JWT)
-POST   /api/v1/status-pages                  { title, slug, monitorIds }
+POST   /api/v1/status-pages                  { title, slug, monitorIds, logoUrl?, incidentBanner? }
+PATCH  /api/v1/status-pages/:id
 GET    /api/v1/status-pages/public/:slug     (öffentlich, kein Auth)
 DELETE /api/v1/status-pages/:id
 ```
@@ -318,8 +349,8 @@ openssl rand -hex 64
 CORS_ORIGIN=https://helio.example.com
 
 # Rate-Limiting (eingebaut):
-POST /api/v1/auth/login    → 10 Versuche / 15 Minuten
-POST /api/v1/auth/register → 10 Versuche / 15 Minuten
+POST /api/v1/auth/login    → 20 Fehlversuche / 15 Minuten
+/api/v1/*                  → API_RATE_LIMIT pro Minute
 ```
 
 ---
@@ -327,12 +358,13 @@ POST /api/v1/auth/register → 10 Versuche / 15 Minuten
 ## Entwicklung
 
 ```bash
-git clone https://github.com/naix1337/helio-v2.git
-cd helio
+git clone https://github.com/naix1337/Helio-BETA.git
+cd Helio-BETA
 npm install
-npm run seed
-npm run dev:server   # Terminal 1
-npm run dev:client   # Terminal 2 (optional)
+npm run dev:server   # Terminal 1 → :3001
+npm run dev:client   # Terminal 2 → :5173 (proxied /api + /ws)
+npm test             # Server-API-Tests
+npm run lint && npm run typecheck
 ```
 
 ### Docker Build

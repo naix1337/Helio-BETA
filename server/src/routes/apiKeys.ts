@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { requireAuth, requireAdmin, type AuthRequest } from '../middleware/auth.js';
+import { requireAuth, type AuthRequest } from '../middleware/auth.js';
 import * as queries from '../db/queries.js';
 
 const router = Router();
@@ -19,6 +19,10 @@ router.get('/', requireAuth, (req: AuthRequest, res) => {
 
 // POST /api-keys
 router.post('/', requireAuth, (req: AuthRequest, res) => {
+  if (req.authMethod !== 'jwt') {
+    res.status(403).json({ success: false, error: 'API keys can only be created from a logged-in session' });
+    return;
+  }
   try {
     const input = createSchema.parse(req.body);
 

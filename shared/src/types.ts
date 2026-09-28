@@ -14,7 +14,11 @@ export interface HttpConfig {
   statusCodeMin?: number;
   statusCodeMax?: number;
   keyword?: string;
+  /** Mark DOWN if the keyword IS found */
+  invertKeyword?: boolean;
   jsonPath?: string;
+  /** Expected value at jsonPath (string comparison) */
+  jsonPathExpected?: string;
   followRedirects?: boolean;
   timeoutMs?: number;
   headers?: Record<string, string>;
@@ -119,6 +123,7 @@ export interface EmailConfig {
 export interface NtfyConfig {
   topic: string;
   serverUrl?: string;
+  accessToken?: string;
 }
 
 export type NotificationConfig =
@@ -288,7 +293,8 @@ export type WsEventType =
   | 'monitor:status-change'
   | 'monitor:created'
   | 'monitor:updated'
-  | 'monitor:deleted';
+  | 'monitor:deleted'
+  | 'containers:updated';
 
 export interface WsEvent<T = unknown> {
   type: WsEventType;

@@ -1,15 +1,15 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { requireAuth, type AuthRequest } from '../middleware/auth.js';
+import { requireAuth, requireWrite, type AuthRequest } from '../middleware/auth.js';
 import * as containerQueries from '../db/containerQueries.js';
-import { startContainerPolling, restartContainerPolling, stopContainerPolling } from '../engine/ContainerCollector.js';
+import { restartContainerPolling, stopContainerPolling } from '../engine/ContainerCollector.js';
 import { ProxmoxClient } from '../collectors/proxmox.js';
 
 const router = Router();
 
 const configSchema = z.object({
-  host: z.string().url('Must be a valid URL (https://your-proxmox:8006)'),
-  user: z.string().min(1, 'User is required (e.g. root@pam)'),
+  host: z.string().url('Must be a valid URL (https://your-proxmox:8006)').refine((u) => /^https?:\/\//.test(u), 'Must start with https://'),
+  user: z.string().min(1, 'User is required (e.g. root@pam or root@pam!tokenid)'),
   password: z.string().min(1, 'Password is required'),
   intervalSeconds: z.number().int().min(10).max(3600).default(60),
 });
@@ -51,7 +51,7 @@ router.get('/config', requireAuth, (_req: AuthRequest, res) => {
 });
 
 // POST /api/v1/containers/config — save Proxmox config and start polling
-router.post('/config', requireAuth, (req: AuthRequest, res) => {
+router.post('/config', requireWrite, (req: AuthRequest, res) => {
   try {
     const input = configSchema.parse(req.body);
     containerQueries.setProxmoxConfig(input);
@@ -67,7 +67,7 @@ router.post('/config', requireAuth, (req: AuthRequest, res) => {
 });
 
 // POST /api/v1/containers/test — test Proxmox connection
-router.post('/test', requireAuth, async (req: AuthRequest, res) => {
+router.post('/test', requireWrite, async (req: AuthRequest, res) => {
   try {
     const input = configSchema.parse(req.body);
     const client = new ProxmoxClient(input.host, input.user, input.password);
@@ -83,7 +83,7 @@ router.post('/test', requireAuth, async (req: AuthRequest, res) => {
 });
 
 // DELETE /api/v1/containers/config — remove Proxmox config and stop polling
-router.delete('/config', requireAuth, (_req: AuthRequest, res) => {
+router.delete('/config', requireWrite, (_req: AuthRequest, res) => {
   stopContainerPolling();
   containerQueries.deleteProxmoxConfig();
   res.json({ success: true, data: null });

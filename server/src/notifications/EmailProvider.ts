@@ -1,6 +1,7 @@
 import { createTransport } from 'nodemailer';
 import type { INotificationProvider } from './INotificationProvider.js';
 import type { NotificationPayload } from '@pulse/shared';
+import { escapeHtml, formatDuration } from './http.js';
 
 export class EmailProvider implements INotificationProvider {
   readonly name = 'email';
@@ -8,12 +9,14 @@ export class EmailProvider implements INotificationProvider {
   private getTransport(config: Record<string, unknown>) {
     return createTransport({
       host: config['smtpHost'] as string,
-      port: (config['smtpPort'] as number) || 587,
-      secure: (config['smtpPort'] as number) === 465,
-      auth: {
-        user: config['smtpUser'] as string,
-        pass: config['smtpPass'] as string,
-      },
+      port: Number(config['smtpPort']) || 587,
+      secure: Number(config['smtpPort']) === 465,
+      auth: config['smtpUser']
+        ? { user: config['smtpUser'] as string, pass: config['smtpPass'] as string }
+        : undefined,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 20000,
     });
   }
 
@@ -37,24 +40,25 @@ export class EmailProvider implements INotificationProvider {
           `Zeit: ${payload.timestamp}`,
         ].filter(Boolean).join('\n'),
         html: `
-          <h2>${payload.monitorName} — <strong>${payload.status}</strong></h2>
+          <h2>${escapeHtml(payload.monitorName)} — <strong>${payload.status}</strong></h2>
           <table>
             ${payload.latencyMs !== undefined ? `<tr><td>Latenz:</td><td>${payload.latencyMs}ms</td></tr>` : ''}
-            ${payload.errorMessage ? `<tr><td>Fehler:</td><td>${payload.errorMessage}</td></tr>` : ''}
-            ${payload.previousStatus ? `<tr><td>Vorheriger Status:</td><td>${payload.previousStatus}</td></tr>` : ''}
+            ${payload.errorMessage ? `<tr><td>Fehler:</td><td>${escapeHtml(payload.errorMessage)}</td></tr>` : ''}
+            ${payload.previousStatus ? `<tr><td>Vorheriger Status:</td><td>${payload.previousStatus}${formatDuration(payload.previousStatusDurationMs) ? ` (${formatDuration(payload.previousStatusDurationMs)})` : ''}</td></tr>` : ''}
             <tr><td>Zeit:</td><td>${payload.timestamp}</td></tr>
           </table>
         `,
       });
       transport.close();
       return true;
-    } catch {
+    } catch (err) {
+      console.error('[email] send failed:', err instanceof Error ? err.message : err);
       return false;
     }
   }
 
   async test(config: Record<string, unknown>): Promise<{ success: boolean; message: string }> {
-    const required = ['smtpHost', 'smtpUser', 'smtpPass', 'fromEmail', 'toEmail'];
+    const required = ['smtpHost', 'fromEmail', 'toEmail'];
     for (const field of required) {
       if (!config[field]) return { success: false, message: `${field} is required` };
     }

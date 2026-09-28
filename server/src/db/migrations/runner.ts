@@ -39,6 +39,4 @@ export function runMigrations(db: Database.Database): void {
 
     console.log(`[migration] applied: ${file}`);
   }
-
-  console.log('[migration] all up to date');
 }

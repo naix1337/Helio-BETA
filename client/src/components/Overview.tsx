@@ -1,22 +1,50 @@
-import { useEffect } from 'react';
-import { Server, Bell, Activity, Clock } from 'lucide-react';
+import { useMemo } from 'react';
+import { Server, Bell, Activity, Gauge } from 'lucide-react';
 import { useStore } from '../store/useStore';
 import KpiCard from './KpiCard';
 import MainChart from './MainChart';
 import AlertFeed from './AlertFeed';
 import NodesTable from './NodesTable';
-import * as monitorsApi from '../api/monitors';
 
 export default function Overview() {
   const monitors = useStore((s) => s.monitors);
-  const monitorsLoading = useStore((s) => s.monitorsLoading);
-  const fetchMonitors = useStore((s) => s.fetchMonitors);
+  const monitorsLoaded = useStore((s) => s.monitorsLoaded);
+  const beats = useStore((s) => s.beats);
 
-  useEffect(() => {
-    fetchMonitors();
-  }, [fetchMonitors]);
+  const stats = useMemo(() => {
+    const active = monitors.filter((m) => m.status !== 'PAUSED');
+    const online = monitors.filter((m) => m.status === 'UP').length;
+    const down = monitors.filter((m) => m.status === 'DOWN').length;
+    const degraded = monitors.filter((m) => m.status === 'DEGRADED').length;
 
-  if (monitorsLoading) {
+    let up = 0, total = 0;
+    const latencyByIndex: number[][] = [];
+    for (const m of active) {
+      const list = beats[m.id] ?? [];
+      list.forEach((b, i) => {
+        if (b.status !== 'PENDING') {
+          total++;
+          if (b.status === 'UP' || b.status === 'DEGRADED') up++;
+        }
+        if (b.latencyMs !== null) {
+          const idx = i + (60 - list.length);
+          (latencyByIndex[idx] ??= []).push(b.latencyMs);
+        }
+      });
+    }
+    const latencySeries = latencyByIndex
+      .filter((a) => a && a.length)
+      .map((a) => a.reduce((x, y) => x + y, 0) / a.length);
+    const avgLatency = latencySeries.length ? Math.round(latencySeries.reduce((a, b) => a + b, 0) / latencySeries.length) : null;
+
+    return {
+      total: monitors.length, online, down, degraded,
+      uptime: total ? Math.round((up / total) * 1000) / 10 : null,
+      avgLatency, latencySeries,
+    };
+  }, [monitors, beats]);
+
+  if (!monitorsLoaded) {
     return (
       <div className="flex items-center justify-center min-h-[300px]" style={{ color: 'var(--color-text-muted)' }}>
         <div className="flex flex-col items-center gap-3">
@@ -27,62 +55,48 @@ export default function Overview() {
     );
   }
 
-  const total = monitors.length;
-  const online = monitors.filter((m) => m.status === 'UP').length;
-  const down = monitors.filter((m) => m.status === 'DOWN' || m.status === 'DEGRADED').length;
-  const okPercent = total > 0 ? Math.round((online / total) * 100) : 0;
+  const small = 'text-[0.9rem] text-[var(--color-text-dim)] font-normal';
 
   return (
     <div className="animate-[view-fade_0.35s_cubic-bezier(0.22,1,0.36,1)]">
-      {/* KPI Grid */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-[26px]">
         <KpiCard
           icon={<Server className="w-[15px] h-[15px]" />}
-          label="Monitore"
-          trend={{ value: `${online}/${total}`, type: okPercent >= 80 ? 'up' : 'down' }}
-          value={<>{online}<small className="text-[0.9rem] text-[var(--color-text-dim)] font-normal"> / {total}</small></>}
-          sparkColor="--color-primary"
-          sparkSeed={3}
+          label="Monitore online"
+          trend={{ value: `${stats.online}/${stats.total}`, type: stats.down > 0 ? 'down' : 'up' }}
+          value={<>{stats.online}<small className={small}> / {stats.total}</small></>}
         />
         <KpiCard
           icon={<Bell className="w-[15px] h-[15px]" />}
-          label="Alerts aktiv"
-          trend={{ value: `${down > 0 ? '⚠' : '✓'}`, type: down > 0 ? 'down' : 'up' }}
-          value={<>{down}<small className="text-[0.9rem] text-[var(--color-text-dim)] font-normal"> kritisch</small></>}
-          sparkColor="--color-down"
-          sparkSeed={11}
+          label="Aktive Alerts"
+          trend={{ value: stats.down + stats.degraded > 0 ? 'Probleme' : 'alles ok', type: stats.down + stats.degraded > 0 ? 'down' : 'up' }}
+          value={<>{stats.down}<small className={small}> down{stats.degraded ? ` · ${stats.degraded} eingeschr.` : ''}</small></>}
         />
         <KpiCard
           icon={<Activity className="w-[15px] h-[15px]" />}
-          label="Ø Uptime (24h)"
-          trend={{ value: 'letzte 24h', type: 'flat' }}
-          value={<>{monitors.length > 0 ? Math.round(monitors.filter(m => m.status === 'UP').length / monitors.length * 100) : 0}<small className="text-[0.9rem] text-[var(--color-text-dim)] font-normal">%</small></>}
-          sparkColor="--color-violet"
-          sparkSeed={0}
-          noSpark
+          label="Uptime (letzte Checks)"
+          trend={{ value: 'live', type: 'flat' }}
+          value={<>{stats.uptime ?? '—'}<small className={small}>{stats.uptime !== null ? ' %' : ''}</small></>}
           isViolet
         />
         <KpiCard
-          icon={<Clock className="w-[15px] h-[15px]" />}
-          label="Check-Intervall"
-          trend={{ value: '⏱', type: 'flat' }}
-          value={<>{Math.round(total > 0 ? monitors.reduce((a, m) => a + m.intervalSeconds, 0) / total / 60 : 0)}<small className="text-[0.9rem] text-[var(--color-text-dim)] font-normal"> min Ø</small></>}
-          sparkColor="--color-primary"
-          sparkSeed={5}
+          icon={<Gauge className="w-[15px] h-[15px]" />}
+          label="Ø Antwortzeit"
+          trend={{ value: 'ms', type: 'flat' }}
+          value={<>{stats.avgLatency ?? '—'}<small className={small}>{stats.avgLatency !== null ? ' ms' : ''}</small></>}
+          sparkData={stats.latencySeries}
         />
       </div>
 
-      {/* Main chart + Alerts */}
       <div className="grid grid-cols-1 xl:grid-cols-[1.62fr_1fr] gap-4 items-start">
         <MainChart />
         <AlertFeed />
       </div>
 
-      {/* Nodes table */}
       <div className="mt-[30px]">
         <NodesTable
           title="Alle Monitore"
-          subtitle={`${online} online · ${down} mit Problemen`}
+          subtitle={`${stats.online} online · ${stats.down + stats.degraded} mit Problemen`}
         />
       </div>
     </div>

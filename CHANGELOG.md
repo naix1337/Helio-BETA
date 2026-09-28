@@ -1,5 +1,37 @@
 # Changelog
 
+## [2.2.0] — Stabilisierung
+
+### Behoben
+- **Build**: Server- und Client-TypeScript-Fehler behoben (Build war defekt); Root-Lockfile neu erzeugt (fehlende native Rolldown-Bindings unter Linux)
+- **Docker**: Image baut jetzt Client + Server (kompiliertes JS statt `tsx` aus devDependencies), Healthcheck, unprivilegierter ICMP-Ping
+- **Engine**: Scheduler nutzte veraltete Monitor-Daten → Statuswechsel/Benachrichtigungen wurden bei jedem Check erneut bzw. nie ausgelöst. Monitor wird jetzt pro Check frisch geladen, Konfigurationsänderungen greifen sofort
+- **Push-Monitore**: Token wird serverseitig erzeugt, Timeout-Logik korrigiert, Recovery-Benachrichtigung, `status`/`msg`/`ping`-Parameter, 404 bei unbekanntem Token
+- **Zeitvergleiche**: ISO-Timestamps wurden mit SQLite-`datetime()` verglichen (falsche Uptime/Pruning/Wartungsfenster)
+- **Aggregation**: echte stündliche Aggregate statt 24h-Werte; Uptime nutzt Aggregate nach Ablauf der Rohdaten
+- **DNS-Checker** (falsche Resolver-API), **Ping-Checker** (`execFile`, Parser für iputils/busybox), **HTTP-Checker** (`ignoreTls` funktioniert, Header/Body/Basic-Auth, JSONPath-Erwartungswert)
+- **ntfy** sendete Roh-JSON als Nachricht; **Telegram** Markdown brach bei Sonderzeichen (jetzt HTML); Zod-Fehlerbehandlung bei Notification-Configs
+- **Backups** liefen nie (`require` in ESM) — jetzt SQLite Online-Backup
+- Proxmox: `netin`/`netout` vertauscht, HTTP-Hosts, API-Token-Auth (`user@realm!tokenid`)
+- Client: API-/WS-URL war fest auf `localhost:3001` (funktionierte nicht im LAN/Docker) — jetzt same-origin + Vite-Proxy
+
+### Sicherheit
+- Offene Registrierung entfernt → Erst-Einrichtung des Admins, weitere Benutzer nur durch Admins
+- 2FA wird beim Login tatsächlich geprüft; Deaktivieren erfordert gültigen Code
+- Refresh-Tokens werden nicht mehr als Access-Token akzeptiert; gelöschte Benutzer verlieren sofort den Zugriff
+- Rollen: Betrachter haben nur Lesezugriff; Secrets (Basic-Auth, Bot-Tokens, SMTP) werden für Betrachter/WebSocket maskiert
+- Öffentliche Status-Seite gibt keine Monitor-Konfiguration (Hosts/URLs) mehr preis
+- JWT-Secret wird ohne `JWT_SECRET` persistent generiert (Sessions & Proxmox-Passwort überleben Neustarts)
+- Abhängigkeiten aktualisiert (nodemailer 10, `uuid` durch `crypto.randomUUID` ersetzt) → `npm audit` ohne Befund
+
+### Neu
+- Uptime-Kuma-artige **Heartbeat-Balken**, Live-Updates per WebSocket
+- **Öffentliche Status-Seiten** unter `/status/<slug>`
+- **Benachrichtigungen** im Menü, Zuweisung direkt im Monitor-Formular, Test ungespeicherter Configs
+- **Wartungsfenster**-UI, **Ereignis-Historie** (Statuswechsel), **Benutzerverwaltung**, Passwort ändern
+- Server-API-Tests (`npm test`)
+
+
 ## v2.1.0 (2026-07-22)
 
 ### 🛡️ Security Hardening (OWASP Top 10)

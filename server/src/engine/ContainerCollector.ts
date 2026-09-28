@@ -1,51 +1,57 @@
 import { ProxmoxClient } from '../collectors/proxmox.js';
 import * as containerQueries from '../db/containerQueries.js';
+import { broadcast } from '../ws/handler.js';
+import { logger } from '../utils/logger.js';
 
 let intervalTimer: ReturnType<typeof setInterval> | null = null;
 let proxmoxClient: ProxmoxClient | null = null;
+let polling = false;
 
 /** Start polling Proxmox for container metrics */
 export function startContainerPolling(): void {
   const config = containerQueries.getProxmoxConfig();
   if (!config) {
-    console.log('[containers] No Proxmox config — polling not started');
+    logger.info('No Proxmox config — container polling not started');
     return;
   }
 
   stopContainerPolling();
-  proxmoxClient = new ProxmoxClient(config.host, config.user, config.password);
+  try {
+    proxmoxClient = new ProxmoxClient(config.host, config.user, config.password);
+  } catch (err) {
+    logger.error({ err }, 'Invalid Proxmox config');
+    return;
+  }
+  const client = proxmoxClient;
 
   const poll = async () => {
+    if (polling) return;
+    polling = true;
     try {
-      const containers = await proxmoxClient!.listContainers();
-      const vms = await proxmoxClient!.listVMs();
+      const [containers, vms] = await Promise.all([client.listContainers(), client.listVMs()]);
       const all = [...containers, ...vms];
 
-      // Ping each running container
+      // API latency per running guest (status call round-trip)
       const pingResults = new Map<number, number>();
-      for (const c of all.filter((c2) => c2.status === 'running')) {
-        // Simple health check via status API call (latency check)
+      await Promise.all(all.filter((c) => c.status === 'running').map(async (c) => {
         const start = Date.now();
-        try {
-          await proxmoxClient!.getContainerStatus(c.node, c.type, c.vmid);
-          pingResults.set(c.vmid, Date.now() - start);
-        } catch {
-          pingResults.set(c.vmid, -1);
-        }
-      }
+        const status = await client.getContainerStatus(c.node, c.type, c.vmid);
+        pingResults.set(c.vmid, status ? Date.now() - start : -1);
+      }));
 
-      // Save to DB
       containerQueries.saveContainerMetrics(all, pingResults);
-      console.log(`[containers] Collected ${all.length} containers/VMs`);
+      broadcast({ type: 'containers:updated', payload: { count: all.length }, timestamp: new Date().toISOString() });
+      logger.debug({ count: all.length }, 'Collected Proxmox containers/VMs');
     } catch (err) {
-      console.error('[containers] Poll error:', err instanceof Error ? err.message : err);
+      logger.warn({ err: err instanceof Error ? err.message : err }, 'Proxmox poll error');
+    } finally {
+      polling = false;
     }
   };
 
-  // Poll immediately, then every N seconds
-  poll();
-  intervalTimer = setInterval(poll, config.intervalSeconds * 1000);
-  console.log(`[containers] Polling every ${config.intervalSeconds}s`);
+  void poll();
+  intervalTimer = setInterval(poll, Math.max(10, config.intervalSeconds) * 1000);
+  logger.info({ intervalSeconds: config.intervalSeconds }, 'Proxmox container polling started');
 }
 
 /** Stop container polling */
