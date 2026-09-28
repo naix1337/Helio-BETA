@@ -5,3 +5,5 @@ dist/
 *.db-shm
 .env
 .env.local
+.helio-secret
+backups/

@@ -21,16 +21,17 @@ export const discordConfigSchema = z.object({
 
 export const emailConfigSchema = z.object({
   smtpHost: z.string().min(1, 'SMTP host is required'),
-  smtpPort: z.number().int().min(1).max(65535).default(587),
-  smtpUser: z.string().min(1, 'SMTP user is required'),
-  smtpPass: z.string().min(1, 'SMTP password is required'),
+  smtpPort: z.coerce.number().int().min(1).max(65535).default(587),
+  smtpUser: z.string().optional().default(''),
+  smtpPass: z.string().optional().default(''),
   fromEmail: z.string().email('From email must be valid'),
   toEmail: z.string().email('To email must be valid'),
 });
 
 export const ntfyConfigSchema = z.object({
   topic: z.string().min(1, 'Topic is required'),
-  serverUrl: z.string().url('Server URL must be valid').optional(),
+  serverUrl: z.string().url('Server URL must be valid').optional().or(z.literal('')),
+  accessToken: z.string().optional(),
 });
 
 export const notificationProviderSchemas: Record<string, z.ZodType> = {

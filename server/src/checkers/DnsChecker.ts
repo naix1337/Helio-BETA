@@ -1,9 +1,7 @@
-import { promises as dnsPromises, Resolver } from 'node:dns';
+import { promises as dnsPromises } from 'node:dns';
 import type { IChecker, CheckResult } from './IChecker.js';
 import type { DnsConfig } from '@pulse/shared';
 import { registerChecker } from './registry.js';
-
-const { resolve4, resolve6, resolveCname, resolveMx, resolveTxt, resolve } = dnsPromises;
 
 /**
  * DNS Checker
@@ -25,11 +23,15 @@ export class DnsChecker implements IChecker {
 
       // Use custom resolver if configured, otherwise system defaults
       if (cfg.resolver) {
-        const customResolver = new Resolver();
+        const customResolver = new dnsPromises.Resolver({ timeout: 5000, tries: 2 });
         customResolver.setServers([cfg.resolver]);
         records = await this.resolveWith(customResolver, cfg.host, recordType);
       } else {
-        records = await this.resolveWith(dnsPromises, cfg.host, recordType);
+        records = await this.resolveWith(new dnsPromises.Resolver({ timeout: 5000, tries: 2 }), cfg.host, recordType);
+      }
+
+      if (records.length === 0) {
+        return { status: 'DOWN', latencyMs: Math.round(performance.now() - start), message: `No ${recordType} records found`, statusCode: null };
       }
 
       const latencyMs = Math.round(performance.now() - start);
@@ -56,7 +58,7 @@ export class DnsChecker implements IChecker {
   }
 
   private async resolveWith(
-    resolver: typeof dnsPromises | Resolver,
+    resolver: InstanceType<typeof dnsPromises.Resolver>,
     host: string,
     recordType: string,
   ): Promise<string[]> {
@@ -66,13 +68,13 @@ export class DnsChecker implements IChecker {
       case 'AAAA':
         return (await resolver.resolve6(host)).map(String);
       case 'CNAME':
-        return [(await resolver.resolveCname(host)).join(', ')];
+        return await resolver.resolveCname(host);
       case 'MX':
         return (await resolver.resolveMx(host)).map((mx) => `${mx.exchange} priority ${mx.priority}`);
       case 'TXT':
         return (await resolver.resolveTxt(host)).map((t) => t.join(' '));
       default:
-        return (await resolver.resolve(host, recordType)).map(String);
+        throw new Error(`Unsupported record type: ${recordType}`);
     }
   }
 }

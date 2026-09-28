@@ -1,19 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '../store/useStore';
 import { apiRequest } from '../api/client';
-import { Copy, Plus, Trash2, Check, Key, Shield, User, Database } from 'lucide-react';
+import { Copy, Plus, Trash2, Key, Shield, User, Server } from 'lucide-react';
 
-type Tab = 'profile' | '2fa' | 'api-keys' | 'retention';
+type Tab = 'profile' | '2fa' | 'api-keys' | 'server';
 
 export default function SettingsView() {
-  const user = useStore((s) => s.user);
   const [tab, setTab] = useState<Tab>('profile');
 
   const tabs = [
     { id: 'profile' as Tab, label: 'Profil', icon: User },
     { id: '2fa' as Tab, label: '2FA', icon: Shield },
     { id: 'api-keys' as Tab, label: 'API-Keys', icon: Key },
-    { id: 'retention' as Tab, label: 'Aufbewahrung', icon: Database },
+    { id: 'server' as Tab, label: 'Server', icon: Server },
   ];
 
   return (
@@ -21,7 +20,7 @@ export default function SettingsView() {
       <h2 className="text-[1.05rem] font-semibold tracking-tight mb-4 m-0" style={{ color: 'var(--color-text)' }}>Einstellungen</h2>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-5 p-1 rounded-[var(--radius-box)]" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
+      <div className="flex gap-1 mb-5 p-1 rounded-[var(--radius-box)] overflow-x-auto" style={{ background: 'var(--color-surface-2)', border: '1px solid var(--color-border)' }}>
         {tabs.map((t) => {
           const Icon = t.icon;
           return (
@@ -43,7 +42,7 @@ export default function SettingsView() {
       {tab === 'profile' && <ProfileTab />}
       {tab === '2fa' && <TwoFactorTab />}
       {tab === 'api-keys' && <ApiKeysTab />}
-      {tab === 'retention' && <RetentionTab />}
+      {tab === 'server' && <ServerTab />}
     </div>
   );
 }
@@ -79,13 +78,43 @@ function ProfileTab() {
           </div>
         </div>
       </div>
+      <PasswordChange />
     </div>
+  );
+}
+
+function PasswordChange() {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [next2, setNext2] = useState('');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (next !== next2) { setMsg({ ok: false, text: 'Neue Passwörter stimmen nicht überein' }); return; }
+    const res = await apiRequest('POST', '/auth/password', { currentPassword: current, newPassword: next });
+    setMsg(res.success ? { ok: true, text: 'Passwort geändert' } : { ok: false, text: res.error || 'Fehler' });
+    if (res.success) { setCurrent(''); setNext(''); setNext2(''); }
+  };
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3 max-w-[400px] mt-6 pt-5" style={{ borderTop: '1px solid var(--color-border)' }}>
+      <h4 className="m-0 text-[0.95rem] font-semibold" style={{ color: 'var(--color-text)' }}>Passwort ändern</h4>
+      <input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} required className="input" placeholder="Aktuelles Passwort" autoComplete="current-password" />
+      <input type="password" value={next} onChange={(e) => setNext(e.target.value)} required minLength={8} className="input" placeholder="Neues Passwort (min. 8 Zeichen)" autoComplete="new-password" />
+      <input type="password" value={next2} onChange={(e) => setNext2(e.target.value)} required minLength={8} className="input" placeholder="Neues Passwort wiederholen" autoComplete="new-password" />
+      {msg && <div className={`alert ${msg.ok ? 'alert-ok' : 'alert-error'}`}>{msg.text}</div>}
+      <button type="submit" className="btn btn-primary self-start">Passwort ändern</button>
+    </form>
   );
 }
 
 function TwoFactorTab() {
   const user = useStore((s) => s.user);
+  const refreshUser = useStore((s) => s.refreshUser);
   const [qrUrl, setQrUrl] = useState('');
+  const [secret, setSecret] = useState('');
+  const [disableToken, setDisableToken] = useState('');
   const [token, setToken] = useState('');
   const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
@@ -95,6 +124,9 @@ function TwoFactorTab() {
     const res = await apiRequest<{ secret: string; qrCodeUrl: string }>('POST', '/auth/2fa/setup');
     if (res.data) {
       setQrUrl(res.data.qrCodeUrl);
+      setSecret(res.data.secret);
+    } else {
+      setMsg(`❌ ${res.error || 'Fehler'}`);
     }
     setLoading(false);
   };
@@ -103,15 +135,15 @@ function TwoFactorTab() {
     if (!token) return;
     setLoading(true);
     const res = await apiRequest('POST', '/auth/2fa/verify', { token });
-    setMsg(res.success ? '✅ 2FA aktiviert!' : '❌ Ungültiger Token');
+    setMsg(res.success ? '✅ 2FA aktiviert!' : '❌ Ungültiger Code');
     setLoading(false);
-    if (res.success) window.location.reload();
+    if (res.success) { setQrUrl(''); setToken(''); await refreshUser(); }
   };
 
   const disable2fa = async () => {
-    if (!confirm('2FA wirklich deaktivieren?')) return;
-    await apiRequest('POST', '/auth/2fa/disable');
-    window.location.reload();
+    const res = await apiRequest('POST', '/auth/2fa/disable', { token: disableToken });
+    setMsg(res.success ? '✅ 2FA deaktiviert' : `❌ ${res.error || 'Fehler'}`);
+    if (res.success) { setDisableToken(''); await refreshUser(); }
   };
 
   return (
@@ -127,17 +159,20 @@ function TwoFactorTab() {
             <Shield className="w-[20px] h-[20px]" style={{ color: 'var(--color-ok)' }} />
             <span className="text-[0.9rem]" style={{ color: 'var(--color-ok)' }}>2FA ist aktiviert</span>
           </div>
-          <button onClick={disable2fa} className="px-4 py-[10px] rounded-[var(--radius-box)] border cursor-pointer text-[0.85rem]" style={{ borderColor: 'var(--color-down-soft)', color: 'var(--color-down)', background: 'transparent' }}>
-            2FA deaktivieren
-          </button>
+          <div className="flex gap-2 flex-wrap">
+            <input value={disableToken} onChange={(e) => setDisableToken(e.target.value.replace(/\D/g, ''))} maxLength={6} className="input mono text-center" style={{ width: 140 }} placeholder="Code" inputMode="numeric" />
+            <button onClick={disable2fa} disabled={disableToken.length < 6} className="btn btn-danger">2FA deaktivieren</button>
+          </div>
+          {msg && <div className="text-[0.85rem] mt-2" style={{ color: msg.includes('✅') ? 'var(--color-ok)' : 'var(--color-down)' }}>{msg}</div>}
         </div>
       ) : qrUrl ? (
         <div>
           <div className="mb-3">
-            <img src={qrUrl} alt="TOTP QR Code" className="w-[160px] h-[160px] rounded-[var(--radius-sm)]" />
+            <img src={qrUrl} alt="TOTP QR Code" className="w-[180px] h-[180px] rounded-[var(--radius-sm)] bg-white p-2" />
+            <div className="font-mono text-[0.75rem] mt-2 break-all" style={{ color: 'var(--color-text-dim)' }}>Manuell: {secret}</div>
           </div>
           <div className="flex gap-2 mb-3">
-            <input value={token} onChange={(e) => setToken(e.target.value)} maxLength={6} className="w-[140px] h-[42px] px-3 rounded-[var(--radius-box)] border text-[1.1rem] text-center font-mono outline-none" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} placeholder="000000" />
+            <input value={token} onChange={(e) => setToken(e.target.value.replace(/\D/g, ''))} maxLength={6} inputMode="numeric" className="w-[140px] h-[42px] px-3 rounded-[var(--radius-box)] border text-[1.1rem] text-center font-mono outline-none" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} placeholder="000000" />
             <button onClick={verify2fa} disabled={loading || token.length < 6} className="px-4 py-[10px] rounded-[var(--radius-box)] border-0 cursor-pointer font-medium" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-fg)' }}>
               {loading ? '…' : 'Bestätigen'}
             </button>
@@ -157,6 +192,9 @@ function ApiKeysTab() {
   const [keys, setKeys] = useState<Array<{ id: string; name: string; keyPrefix: string; scopes: string[]; createdAt: string }>>([]);
   const [newKey, setNewKey] = useState('');
   const [newKeyName, setNewKeyName] = useState('');
+  const [writeScope, setWriteScope] = useState(false);
+  const [error, setError] = useState('');
+  const isAdmin = useStore((s) => s.user?.role === 'admin');
 
   const loadKeys = async () => {
     const res = await apiRequest<Array<{ id: string; name: string; keyPrefix: string; scopes: string[]; createdAt: string }>>('GET', '/api-keys');
@@ -167,28 +205,32 @@ function ApiKeysTab() {
 
   const createKey = async () => {
     if (!newKeyName.trim()) return;
-    const res = await apiRequest<{ id: string; name: string; plainKey: string; keyPrefix: string }>('POST', '/api-keys', { name: newKeyName.trim(), scopes: ['read', 'write'] });
+    setError('');
+    const res = await apiRequest<{ id: string; name: string; plainKey: string; keyPrefix: string }>('POST', '/api-keys', { name: newKeyName.trim(), scopes: writeScope ? ['read', 'write'] : ['read'] });
     if (res.data) {
       setNewKey(res.data.plainKey);
       setNewKeyName('');
       loadKeys();
+    } else {
+      setError(res.error || 'Fehler');
     }
   };
 
   const deleteKey = async (id: string) => {
+    if (!confirm('API-Key widerrufen?')) return;
     await apiRequest('DELETE', `/api-keys/${id}`);
     loadKeys();
   };
 
   const copyKey = async (k: string) => {
-    try { await navigator.clipboard.writeText(k); } catch {}
+    try { await navigator.clipboard.writeText(k); } catch { /* clipboard unavailable */ }
   };
 
   return (
     <div className="border rounded-[var(--radius-lg)] overflow-hidden" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
       <div className="p-5 border-b" style={{ borderColor: 'var(--color-border)' }}>
         <h3 className="text-[1rem] font-semibold m-0 mb-2" style={{ color: 'var(--color-text)' }}>API-Keys</h3>
-        <p className="text-[0.82rem] m-0 mb-3" style={{ color: 'var(--color-text-muted)' }}>Erstelle API-Keys für den programmatischen Zugriff auf die Helio-API.</p>
+        <p className="text-[0.82rem] m-0 mb-3" style={{ color: 'var(--color-text-muted)' }}>Erstelle API-Keys für den programmatischen Zugriff auf die Helio-API (Header <code>X-API-Key</code>).</p>
 
         {newKey && (
           <div className="p-3 mb-3 rounded-[var(--radius-sm)]" style={{ background: 'var(--color-ok-soft)', border: '1px solid var(--color-ok-soft)' }}>
@@ -210,6 +252,8 @@ function ApiKeysTab() {
             <Plus className="w-[16px] h-[16px]" /> Erstellen
           </button>
         </div>
+        {isAdmin && <label className="check mt-3"><input type="checkbox" checked={writeScope} onChange={(e) => setWriteScope(e.target.checked)} /> Schreibzugriff (Monitore anlegen/ändern)</label>}
+        {error && <div className="alert alert-error mt-3">{error}</div>}
       </div>
 
       <div className="p-5">
@@ -237,23 +281,46 @@ function ApiKeysTab() {
   );
 }
 
-function RetentionTab() {
+interface ServerInfo {
+  version: string;
+  retentionRawDays: number;
+  backup: { enabled: boolean; dir: string; retentionDays: number };
+  allowPrivateNotificationTargets: boolean;
+  ntfyDefaultServer: string;
+}
+
+function ServerTab() {
+  const [info, setInfo] = useState<ServerInfo | null>(null);
+  useEffect(() => { apiRequest<ServerInfo>('GET', '/settings/server').then((r) => r.data && setInfo(r.data)); }, []);
+
+  const rows: [string, string, string][] = info ? [
+    ['Version', info.version, ''],
+    ['Heartbeat-Rohdaten', `${info.retentionRawDays} Tage`, 'RETENTION_RAW_DAYS — danach nur noch stündliche Aggregate'],
+    ['Automatische Backups', info.backup.enabled ? `aktiv (${info.backup.retentionDays} Tage)` : 'deaktiviert', 'BACKUP_ENABLED / BACKUP_RETENTION_DAYS'],
+    ['Backup-Verzeichnis', info.backup.dir, 'BACKUP_DIR'],
+    ['Private Ziele für Benachrichtigungen', info.allowPrivateNotificationTargets ? 'erlaubt' : 'blockiert (SSRF-Schutz)', 'NOTIFICATION_ALLOW_PRIVATE'],
+    ['ntfy Standard-Server', info.ntfyDefaultServer, 'NTFY_DEFAULT_SERVER'],
+  ] : [];
+
   return (
-    <div className="border rounded-[var(--radius-lg)] p-5" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-      <h3 className="text-[1rem] font-semibold m-0 mb-2" style={{ color: 'var(--color-text)' }}>Daten-Aufbewahrung</h3>
-      <p className="text-[0.85rem] mb-4" style={{ color: 'var(--color-text-muted)' }}>
-        Konfiguriere, wie lange Heartbeat-Rohdaten gespeichert werden.
+    <div className="card p-5">
+      <h3 className="text-[1rem] font-semibold m-0 mb-2" style={{ color: 'var(--color-text)' }}>Server-Konfiguration</h3>
+      <p className="text-[0.85rem] mb-4 mt-0" style={{ color: 'var(--color-text-muted)' }}>
+        Diese Werte werden über Umgebungsvariablen gesetzt (siehe <code>.env.example</code>) und erfordern einen Neustart.
       </p>
-      <div>
-        <label className="block text-[0.82rem] font-medium mb-[4px]" style={{ color: 'var(--color-text-muted)' }}>Heartbeat-Rohdaten (Tage)</label>
-        <div className="flex items-center gap-3">
-          <input type="number" defaultValue={7} min={1} max={90} className="w-[100px] h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] font-mono outline-none" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-          <span className="text-[0.8rem]" style={{ color: 'var(--color-text-dim)' }}>Danach werden Rohdaten zu Stundenswerten aggregiert</span>
-        </div>
-        <button className="mt-3 px-4 py-[8px] rounded-[var(--radius-box)] border-0 cursor-pointer text-[0.85rem]" style={{ background: 'var(--color-primary)', color: 'var(--color-primary-fg)' }}>
-          Speichern
-        </button>
-      </div>
+      {!info ? <div className="hint">Lade…</div> : (
+        <table className="table">
+          <tbody>
+            {rows.map(([k, v, env]) => (
+              <tr key={k}>
+                <td style={{ color: 'var(--color-text)' }}>{k}</td>
+                <td className="font-mono text-[0.82rem]">{v}</td>
+                <td className="font-mono text-[0.72rem] max-md:hidden" style={{ color: 'var(--color-text-dim)' }}>{env}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

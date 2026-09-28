@@ -2,58 +2,22 @@ import { create } from 'zustand';
 import * as authApi from '../api/auth';
 import * as monitorsApi from '../api/monitors';
 import * as notificationsApi from '../api/notifications';
-import { getAccessToken, clearTokens } from '../api/client';
+import { getAccessToken, onSessionExpired } from '../api/client';
 
 /* ---------- Types ---------- */
 
-export interface User {
-  id: string;
-  email: string;
-  totpEnabled: boolean;
-  role: string;
-  createdAt: string;
-}
+export type User = authApi.UserPublic;
+export type Monitor = monitorsApi.Monitor;
+export type Heartbeat = monitorsApi.Heartbeat;
+export type Beat = monitorsApi.Beat;
+export type UptimeSummary = monitorsApi.UptimeSummary;
+export type Notification = notificationsApi.Notification;
 
-export interface Monitor {
-  id: string;
-  name: string;
-  type: 'http' | 'tcp' | 'ping' | 'dns' | 'ssl' | 'push';
-  config: Record<string, unknown>;
-  intervalSeconds: number;
-  retries: number;
-  status: 'UP' | 'DOWN' | 'PENDING' | 'PAUSED' | 'DEGRADED';
-  tags: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+export type ViewName =
+  | 'overview' | 'nodes' | 'containers' | 'alerts' | 'notifications' | 'maintenance'
+  | 'status' | 'metrics' | 'team' | 'settings';
 
-export interface Heartbeat {
-  id: string;
-  monitorId: string;
-  timestamp: string;
-  status: string;
-  latencyMs: number | null;
-  message: string | null;
-  statusCode: number | null;
-}
-
-export interface UptimeSummary {
-  last24h: number;
-  last7d: number;
-  last30d: number;
-  last365d: number;
-}
-
-export interface Notification {
-  id: string;
-  name: string;
-  provider: 'webhook' | 'telegram' | 'discord' | 'email' | 'ntfy';
-  config: Record<string, unknown>;
-  monitorIds: string[];
-  createdAt: string;
-}
-
-export type ViewName = 'overview' | 'nodes' | 'containers' | 'alerts' | 'status' | 'metrics' | 'team' | 'settings';
+const MAX_BEATS = 60;
 
 /* ---------- State ---------- */
 
@@ -61,16 +25,19 @@ interface AppState {
   // Auth
   user: User | null;
   isAuthenticated: boolean;
+  authChecked: boolean;
+  needsSetup: boolean;
   isLoading: boolean;
   authError: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string) => Promise<void>;
+  requires2fa: boolean;
+  login: (email: string, password: string, totpToken?: string) => Promise<void>;
+  setup: (email: string, password: string) => Promise<void>;
   logout: () => void;
   checkAuth: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 
   // Theme
   theme: 'dark' | 'light';
-  setTheme: (t: 'dark' | 'light') => void;
   toggleTheme: () => void;
 
   // View routing
@@ -79,24 +46,33 @@ interface AppState {
   detailMonitorId: string | null;
   setDetailMonitor: (id: string | null) => void;
 
-  // Sidebar
+  // Sidebar / search
   sidebarOpen: boolean;
   setSidebarOpen: (o: boolean) => void;
   toggleSidebar: () => void;
+  search: string;
+  setSearch: (q: string) => void;
 
-  // Time range
+  // Time range for overview chart
   timeRange: string;
   setTimeRange: (r: string) => void;
 
-  // Monitors (from API)
+  // Monitors
   monitors: Monitor[];
-  monitorsLoading: boolean;
+  monitorsLoaded: boolean;
   monitorsError: string | null;
   fetchMonitors: () => Promise<void>;
+  beats: Record<string, Beat[]>;
+  fetchBeats: () => Promise<void>;
 
-  // Notifications (from API)
+  // Live updates (from WebSocket)
+  applyHeartbeat: (monitorId: string, hb: Heartbeat) => void;
+  applyStatusChange: (monitorId: string, status: Monitor['status']) => void;
+  upsertMonitor: (m: Monitor) => void;
+  removeMonitor: (id: string) => void;
+
+  // Notifications
   notifications: Notification[];
-  notificationsLoading: boolean;
   fetchNotifications: () => Promise<void>;
 
   // Monitor form modal
@@ -107,75 +83,92 @@ interface AppState {
 }
 
 function getInitialTheme(): 'dark' | 'light' {
-  if (typeof window === 'undefined') return 'dark';
-  const saved = localStorage.getItem('helio-theme');
-  if (saved === 'light' || saved === 'dark') return saved;
+  try {
+    const saved = localStorage.getItem('helio-theme');
+    if (saved === 'light' || saved === 'dark') return saved;
+  } catch { /* ignore */ }
   return 'dark';
 }
 
 export const useStore = create<AppState>((set, get) => ({
   /* ---------- Auth ---------- */
   user: null,
-  isAuthenticated: !!getAccessToken(),
+  isAuthenticated: false,
+  authChecked: false,
+  needsSetup: false,
   isLoading: false,
   authError: null,
+  requires2fa: false,
 
-  login: async (email, password) => {
+  login: async (email, password, totpToken) => {
     set({ isLoading: true, authError: null });
     try {
-      const result = await authApi.login(email, password);
-      if (!result) throw new Error('Login fehlgeschlagen');
-      set({ user: result.user, isAuthenticated: true, isLoading: false });
-      // Fetch initial data
-      get().fetchMonitors();
-      get().fetchNotifications();
+      const result = await authApi.login(email, password, totpToken);
+      set({ user: result.user, isAuthenticated: true, isLoading: false, requires2fa: false });
+      void get().fetchMonitors();
+      void get().fetchNotifications();
     } catch (err) {
+      if (err instanceof authApi.TwoFactorRequiredError) {
+        set({ isLoading: false, requires2fa: true, authError: totpToken ? err.message : null });
+        return;
+      }
       set({ isLoading: false, authError: err instanceof Error ? err.message : 'Login fehlgeschlagen' });
     }
   },
 
-  register: async (email, password) => {
+  setup: async (email, password) => {
     set({ isLoading: true, authError: null });
     try {
-      const result = await authApi.register(email, password);
-      if (!result) throw new Error('Registrierung fehlgeschlagen');
-      set({ user: result.user, isAuthenticated: true, isLoading: false });
+      const result = await authApi.setup(email, password);
+      set({ user: result.user, isAuthenticated: true, isLoading: false, needsSetup: false });
+      void get().fetchMonitors();
+      void get().fetchNotifications();
     } catch (err) {
-      set({ isLoading: false, authError: err instanceof Error ? err.message : 'Registrierung fehlgeschlagen' });
+      set({ isLoading: false, authError: err instanceof Error ? err.message : 'Einrichtung fehlgeschlagen' });
     }
   },
 
   logout: () => {
     authApi.logout();
-    set({ user: null, isAuthenticated: false, monitors: [], notifications: [] });
+    set({
+      user: null, isAuthenticated: false, monitors: [], monitorsLoaded: false, beats: {},
+      notifications: [], requires2fa: false, detailMonitorId: null, currentView: 'overview',
+    });
   },
 
   checkAuth: async () => {
-    if (!getAccessToken()) {
-      set({ isAuthenticated: false, user: null });
+    const setupNeeded = await authApi.needsSetup().catch(() => false);
+    if (setupNeeded) {
+      authApi.logout();
+      set({ needsSetup: true, isAuthenticated: false, user: null, authChecked: true });
       return;
     }
-    try {
-      const profile = await authApi.getProfile();
-      if (profile) {
-        set({ user: profile, isAuthenticated: true });
-        get().fetchMonitors();
-        get().fetchNotifications();
-      } else {
-        set({ isAuthenticated: false, user: null });
-      }
-    } catch {
-      set({ isAuthenticated: false, user: null });
+    if (!getAccessToken()) {
+      set({ isAuthenticated: false, user: null, authChecked: true, needsSetup: false });
+      return;
     }
+    const profile = await authApi.getProfile().catch(() => null);
+    if (profile) {
+      set({ user: profile, isAuthenticated: true, authChecked: true, needsSetup: false });
+      void get().fetchMonitors();
+      void get().fetchNotifications();
+    } else {
+      authApi.logout();
+      set({ isAuthenticated: false, user: null, authChecked: true, needsSetup: false });
+    }
+  },
+
+  refreshUser: async () => {
+    const profile = await authApi.getProfile().catch(() => null);
+    if (profile) set({ user: profile });
   },
 
   /* ---------- Theme ---------- */
   theme: getInitialTheme(),
-  setTheme: (t) => { localStorage.setItem('helio-theme', t); set({ theme: t }); },
   toggleTheme: () =>
     set((s) => {
       const next = s.theme === 'dark' ? 'light' : 'dark';
-      localStorage.setItem('helio-theme', next);
+      try { localStorage.setItem('helio-theme', next); } catch { /* ignore */ }
       return { theme: next };
     }),
 
@@ -187,39 +180,80 @@ export const useStore = create<AppState>((set, get) => ({
   sidebarOpen: false,
   setSidebarOpen: (o) => set({ sidebarOpen: o }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
-  timeRange: '24',
+  search: '',
+  setSearch: (q) => set({ search: q }),
+  timeRange: '24h',
   setTimeRange: (r) => set({ timeRange: r }),
 
-  /* ---------- API Data ---------- */
+  /* ---------- Monitors ---------- */
   monitors: [],
-  monitorsLoading: false,
+  monitorsLoaded: false,
   monitorsError: null,
 
   fetchMonitors: async () => {
-    set({ monitorsLoading: true, monitorsError: null });
     try {
       const data = await monitorsApi.listMonitors();
-      set({ monitors: data, monitorsLoading: false });
+      set({ monitors: data, monitorsLoaded: true, monitorsError: null });
+      void get().fetchBeats();
     } catch (err) {
-      set({ monitorsLoading: false, monitorsError: err instanceof Error ? err.message : 'Fehler beim Laden' });
+      set({ monitorsLoaded: true, monitorsError: err instanceof Error ? err.message : 'Fehler beim Laden' });
     }
   },
 
-  notifications: [],
-  notificationsLoading: false,
-
-  fetchNotifications: async () => {
-    set({ notificationsLoading: true });
+  beats: {},
+  fetchBeats: async () => {
     try {
-      const data = await notificationsApi.listNotifications();
-      set({ notifications: data, notificationsLoading: false });
-    } catch {
-      set({ notificationsLoading: false });
-    }
+      set({ beats: await monitorsApi.getBeats(MAX_BEATS) });
+    } catch { /* ignore */ }
   },
 
+  applyHeartbeat: (monitorId, hb) =>
+    set((s) => {
+      const list = [...(s.beats[monitorId] ?? []), { status: hb.status, latencyMs: hb.latencyMs, timestamp: hb.timestamp, message: hb.message }];
+      return { beats: { ...s.beats, [monitorId]: list.slice(-MAX_BEATS) } };
+    }),
+
+  applyStatusChange: (monitorId, status) =>
+    set((s) => ({ monitors: s.monitors.map((m) => (m.id === monitorId ? { ...m, status } : m)) })),
+
+  upsertMonitor: (m) =>
+    set((s) => {
+      const exists = s.monitors.some((x) => x.id === m.id);
+      const monitors = exists ? s.monitors.map((x) => (x.id === m.id ? m : x)) : [...s.monitors, m];
+      monitors.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+      return { monitors };
+    }),
+
+  removeMonitor: (id) =>
+    set((s) => {
+      const beats = { ...s.beats };
+      delete beats[id];
+      return {
+        monitors: s.monitors.filter((m) => m.id !== id),
+        beats,
+        detailMonitorId: s.detailMonitorId === id ? null : s.detailMonitorId,
+      };
+    }),
+
+  /* ---------- Notifications ---------- */
+  notifications: [],
+  fetchNotifications: async () => {
+    try {
+      set({ notifications: await notificationsApi.listNotifications() });
+    } catch { /* ignore */ }
+  },
+
+  /* ---------- Monitor form ---------- */
   showMonitorForm: false,
   setShowMonitorForm: (v) => set({ showMonitorForm: v, editMonitorId: null }),
   editMonitorId: null,
-  setEditMonitor: (id) => set({ editMonitorId: id, showMonitorForm: true }),
+  setEditMonitor: (id) => set({ editMonitorId: id, showMonitorForm: id !== null }),
 }));
+
+// Session expired (refresh failed) → back to login
+onSessionExpired(() => {
+  if (useStore.getState().isAuthenticated) useStore.getState().logout();
+});
+
+/** Convenience selector */
+export const useIsAdmin = () => useStore((s) => s.user?.role === 'admin');

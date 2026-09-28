@@ -1,7 +1,10 @@
 import { useEffect, useState, useRef } from 'react';
 import { apiRequest } from '../api/client';
+import { onWsEvent } from '../hooks/useWebSocket';
 import { prepCanvas, getCSSVar, hexA } from '../utils/chart';
-import { Server, Cpu, MemoryStick, HardDrive, Settings, Activity } from 'lucide-react';
+import { Server, Cpu, MemoryStick, HardDrive, Settings } from 'lucide-react';
+
+interface ProxmoxConfigInfo { host: string; user: string; intervalSeconds: number; connected: boolean }
 
 interface Container {
   vmid: number; name: string; node: string; type: string; status: string;
@@ -45,22 +48,30 @@ export default function ContainerDashboard() {
   const load = async () => {
     const [cRes, cfgRes] = await Promise.all([
       apiRequest<Container[]>('GET', '/containers'),
-      apiRequest<any>('GET', '/containers/config'),
+      apiRequest<ProxmoxConfigInfo | null>('GET', '/containers/config'),
     ]);
     if (cRes.data) setContainers(cRes.data);
     if (cfgRes.data) { setConfig(cfgRes.data); if (!cfgRes.data.connected) setShowConfig(true); }
     else setShowConfig(true);
   };
 
-  useEffect(() => { load(); }, []);
-  useEffect(() => { const i = setInterval(load, 10000); return () => clearInterval(i); }, []);
-
-  // Load history on selection
   useEffect(() => {
-    if (!selected) return;
+    void load();
+    const i = setInterval(load, 30000);
+    // Live refresh after each Proxmox poll
+    const off = onWsEvent('containers:updated', () => void load());
+    return () => { clearInterval(i); off(); };
+  }, []);
+
+  // Load history on selection (and refresh it whenever new metrics arrive)
+  const selectedVmid = selected?.vmid;
+  useEffect(() => {
+    if (selectedVmid === undefined) return;
     setMetricTab('cpu');
-    apiRequest<Container[]>('GET', `/containers/${selected.vmid}/history`).then((r) => { if (r.data) setHistory(r.data); });
-  }, [selected?.vmid]);
+    const loadHistory = () => apiRequest<Container[]>('GET', `/containers/${selectedVmid}/history`).then((r) => { if (r.data) setHistory(r.data); });
+    void loadHistory();
+    return onWsEvent('containers:updated', () => void loadHistory());
+  }, [selectedVmid]);
 
   // Draw chart based on selected metric tab
   useEffect(() => {
@@ -109,27 +120,28 @@ export default function ContainerDashboard() {
     const grad = ctx.createLinearGradient(0, 0, 0, h);
     grad.addColorStop(0, hexA(color, 0.25)); grad.addColorStop(1, hexA(color, 0));
     ctx.beginPath();
-    data.forEach((v, i) => { const x = pad + (i / (data.length - 1)) * (w - pad * 2); const y = h - pad - (v / maxVal) * pH; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+    data.forEach((v, i) => { const x = pad + (i / (data.length - 1)) * (w - pad * 2); const y = h - pad - (v / maxVal) * pH; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
     ctx.lineTo(w - pad, h - pad); ctx.lineTo(pad, h - pad); ctx.closePath();
     ctx.fillStyle = grad; ctx.fill();
 
     // Draw line
     ctx.beginPath();
-    data.forEach((v, i) => { const x = pad + (i / (data.length - 1)) * (w - pad * 2); const y = h - pad - (v / maxVal) * pH; i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y); });
+    data.forEach((v, i) => { const x = pad + (i / (data.length - 1)) * (w - pad * 2); const y = h - pad - (v / maxVal) * pH; if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
     ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
 
     // Last point dot
     const lastX = w - pad; const lastY = h - pad - (data[data.length - 1]! / maxVal) * pH;
     ctx.beginPath(); ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2); ctx.fillStyle = color; ctx.fill();
-  }, [history, metricTab, selected?.vmid]);
+  }, [history, metricTab, selectedVmid]);
 
   const saveConfig = async () => {
     const res = await apiRequest('POST', '/containers/config', { host: cfgHost, user: cfgUser, password: cfgPass, intervalSeconds: cfgInterval });
-    if (res.success) { setShowConfig(false); load(); }
+    if (res.success) { setShowConfig(false); setTestResult(''); void load(); }
+    else setTestResult(res.error || 'Speichern fehlgeschlagen');
   };
   const testConnection = async () => {
-    const res = await apiRequest<any>('POST', '/containers/test', { host: cfgHost, user: cfgUser, password: cfgPass });
-    setTestResult(res.data?.message || 'Test fehlgeschlagen');
+    const res = await apiRequest<{ success: boolean; message: string }>('POST', '/containers/test', { host: cfgHost, user: cfgUser, password: cfgPass });
+    setTestResult(res.data?.message || res.error || 'Test fehlgeschlagen');
   };
 
   const running = containers.filter((c) => c.status === 'running');
@@ -161,8 +173,8 @@ export default function ContainerDashboard() {
           <div className="flex flex-col gap-3">
             <input value={cfgHost} onChange={(e) => setCfgHost(e.target.value)} className="w-full h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] font-mono outline-none" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} placeholder="https://proxmox.local:8006" />
             <div className="grid grid-cols-2 gap-3">
-              <input value={cfgUser} onChange={(e) => setCfgUser(e.target.value)} className="h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] font-mono outline-none" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} placeholder="root@pam" />
-              <input type="password" value={cfgPass} onChange={(e) => setCfgPass(e.target.value)} className="h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] font-mono outline-none" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} placeholder="Passwort" />
+              <input value={cfgUser} onChange={(e) => setCfgUser(e.target.value)} className="h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] font-mono outline-none" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} placeholder="root@pam oder root@pam!tokenid" />
+              <input type="password" value={cfgPass} onChange={(e) => setCfgPass(e.target.value)} className="h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] font-mono outline-none" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} placeholder="Passwort / Token-Secret" />
             </div>
             <div className="flex items-center gap-3">
               <input type="number" value={cfgInterval} onChange={(e) => setCfgInterval(Number(e.target.value))} min={10} className="w-[100px] h-[42px] px-3 rounded-[var(--radius-box)] border text-[0.9rem] font-mono outline-none" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />

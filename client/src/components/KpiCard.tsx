@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { drawSparkline } from '../utils/chart';
+import { drawSparklineFromData } from '../utils/chart';
 import type { ReactNode } from 'react';
 
 interface KpiCardProps {
@@ -7,26 +7,24 @@ interface KpiCardProps {
   label: string;
   trend: { value: string; type: 'up' | 'down' | 'flat' };
   value: ReactNode;
-  sparkColor: string;
-  sparkSeed: number;
-  sparkClamp?: { min: number; max: number };
-  isViolet?: boolean;
-  noSpark?: boolean;
+  sparkColor?: string;
+  sparkData?: number[];
   isViolet?: boolean;
 }
 
-export default function KpiCard({ icon, label, trend, value, sparkColor, sparkSeed = 0, sparkClamp, isViolet, noSpark }: KpiCardProps) {
+export default function KpiCard({ icon, label, trend, value, sparkColor = '--color-primary', sparkData, isViolet }: KpiCardProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const hasSpark = !!sparkData && sparkData.length >= 2;
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const draw = () => drawSparkline(canvas, sparkColor, sparkSeed, undefined, sparkClamp);
+    if (!canvas || !sparkData) return;
+    const draw = () => drawSparklineFromData(canvas, sparkData, sparkColor);
     draw();
-    const onResize = () => setTimeout(draw, 50);
+    const onResize = () => draw();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [sparkColor, sparkSeed, sparkClamp, noSpark]);
+  }, [sparkColor, sparkData]);
 
   const trendClass =
     trend.type === 'up' ? 'text-[var(--color-ok)] bg-[var(--color-ok-soft)]' :
@@ -34,22 +32,22 @@ export default function KpiCard({ icon, label, trend, value, sparkColor, sparkSe
     'text-[var(--color-text-dim)] bg-[var(--color-surface-2)]';
 
   return (
-    <div className="border border-[var(--color-border)] rounded-[var(--radius-lg)] bg-[var(--color-surface)] p-[18px] overflow-hidden">
-      <div className="flex items-center justify-between">
-        <span className="text-[0.82rem] text-[var(--color-text-muted)] flex items-center gap-2">
-          <span className={`w-[28px] h-[28px] rounded-[8px] grid place-items-center ${isViolet ? 'bg-[var(--color-violet-soft)] text-[var(--color-violet)]' : 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]'}`}>
+    <div className="card p-[18px] overflow-hidden">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[0.82rem] text-[var(--color-text-muted)] flex items-center gap-2 min-w-0">
+          <span className={`w-[28px] h-[28px] rounded-[8px] grid place-items-center flex-none ${isViolet ? 'bg-[var(--color-violet-soft)] text-[var(--color-violet)]' : 'bg-[var(--color-primary-soft)] text-[var(--color-primary)]'}`}>
             {icon}
           </span>
-          {label}
+          <span className="truncate">{label}</span>
         </span>
-        <span className={`font-mono text-[0.72rem] font-medium px-[7px] py-[2px] rounded-[6px] ${trendClass}`}>
+        <span className={`font-mono text-[0.72rem] font-medium px-[7px] py-[2px] rounded-[6px] whitespace-nowrap ${trendClass}`}>
           {trend.value}
         </span>
       </div>
-      <div className="font-mono text-[2rem] font-[650] tracking-tight mt-[14px] leading-none">
+      <div className="font-mono text-[2rem] font-[650] tracking-tight mt-[14px] leading-none" style={{ color: 'var(--color-text)' }}>
         {value}
       </div>
-      {!noSpark && <canvas ref={canvasRef} className="mt-[12px] h-[40px] w-full block" />}
+      {hasSpark ? <canvas ref={canvasRef} className="mt-[12px] h-[40px] w-full block" /> : <div className="mt-[12px] h-[40px]" />}
     </div>
   );
 }

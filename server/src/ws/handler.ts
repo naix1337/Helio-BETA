@@ -1,7 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'node:http';
-import jwt from 'jsonwebtoken';
-import { config } from '../config.js';
+import { verifyAccessToken } from '../middleware/auth.js';
+import { logger } from '../utils/logger.js';
 import type { WsEvent, StatusChangePayload, HeartbeatPayload } from '@pulse/shared';
 import { onStatusChange, onHeartbeat } from '../engine/Engine.js';
 
@@ -22,18 +22,12 @@ export function setupWebSocket(server: Server): WebSocketServer {
     const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`);
     const token = url.searchParams.get('token');
 
-    if (token) {
-      try {
-        const decoded = jwt.verify(token, config.jwtSecret) as { userId: string };
-        ws.userId = decoded.userId;
-      } catch {
-        ws.close(4001, 'Invalid token');
-        return;
-      }
-    } else {
-      // Allow unauthenticated connections but only send public data
-      // (for status pages etc.)
+    const decoded = token ? verifyAccessToken(token) : null;
+    if (!decoded) {
+      ws.close(4001, 'Invalid token');
+      return;
     }
+    ws.userId = decoded.userId;
 
     ws.on('pong', () => {
       ws.isAlive = true;
@@ -79,7 +73,7 @@ export function setupWebSocket(server: Server): WebSocketServer {
     });
   });
 
-  console.log('[ws] WebSocket server ready on /ws');
+  logger.info('WebSocket server ready on /ws');
   return wss;
 }
 

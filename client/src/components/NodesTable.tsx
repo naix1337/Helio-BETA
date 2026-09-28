@@ -1,8 +1,11 @@
-import { useEffect, useRef, useState } from 'react';
-import { useStore, type Monitor } from '../store/useStore';
-import { drawRowSpark } from '../utils/chart';
+import { useMemo } from 'react';
+import { Trash2, Edit3, Pause, Play } from 'lucide-react';
+import { useStore, useIsAdmin, type Monitor, type Beat } from '../store/useStore';
 import * as monitorsApi from '../api/monitors';
-import { Trash2, Edit3 } from 'lucide-react';
+import BeatBar from './BeatBar';
+import StatusPill from './StatusPill';
+import { statusColor } from '../utils/format';
+import { TYPE_LABELS, formatInterval, monitorTarget, uptimeColor } from '../utils/format';
 
 interface NodesTableProps {
   title?: string;
@@ -10,57 +13,74 @@ interface NodesTableProps {
   full?: boolean;
 }
 
-function statusBadge(st: string) {
-  const map: Record<string, [string, string]> = {
-    UP: ['ok', 'online'],
-    DOWN: ['down', 'offline'],
-    DEGRADED: ['warn', 'gedrosselt'],
-    PENDING: ['warn', 'ausstehend'],
-    PAUSED: ['warn', 'pausiert'],
-  };
-  const [cls, label] = map[st] || ['ok', 'online'];
-  return `<span class="inline-flex items-center gap-[7px] font-mono text-[0.74rem] font-medium px-[10px] py-[4px] rounded-full border" style="color:var(--color-${cls});border-color:var(--color-${cls}-soft);background:var(--color-${cls}-soft)">${label}</span>`;
-}
-
 export default function NodesTable({ title, subtitle, full }: NodesTableProps) {
   const monitors = useStore((s) => s.monitors);
-  const fetchMonitors = useStore((s) => s.fetchMonitors);
+  const beats = useStore((s) => s.beats);
+  const search = useStore((s) => s.search);
+  const isAdmin = useIsAdmin();
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Monitor "${name}" wirklich löschen?`)) return;
-    await monitorsApi.deleteMonitor(id);
-    fetchMonitors();
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return monitors;
+    return monitors.filter((m) =>
+      m.name.toLowerCase().includes(q) ||
+      m.type.includes(q) ||
+      m.tags.some((t) => t.toLowerCase().includes(q)) ||
+      monitorTarget(m.type, monitorsApi.monitorConfig(m)).toLowerCase().includes(q));
+  }, [monitors, search]);
+
+  const handleDelete = async (m: Monitor) => {
+    if (!confirm(`Monitor "${m.name}" wirklich löschen? Alle Heartbeats werden entfernt.`)) return;
+    try {
+      await monitorsApi.deleteMonitor(m.id);
+      useStore.getState().removeMonitor(m.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Löschen fehlgeschlagen');
+    }
+  };
+
+  const handleToggle = async (m: Monitor) => {
+    try {
+      const updated = m.status === 'PAUSED' ? await monitorsApi.resumeMonitor(m.id) : await monitorsApi.pauseMonitor(m.id);
+      useStore.getState().upsertMonitor(updated);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Aktion fehlgeschlagen');
+    }
   };
 
   return (
     <div>
       {(title || subtitle) && (
-        <div className="flex items-center justify-between gap-[14px] mb-4">
+        <div className="flex items-center justify-between gap-[14px] mb-4 flex-wrap">
           {title && <h2 className="text-[1.05rem] font-semibold tracking-tight m-0" style={{ color: 'var(--color-text)' }}>{title}</h2>}
           {subtitle && <span className="font-mono text-[0.8rem]" style={{ color: 'var(--color-text-dim)' }}>{subtitle}</span>}
         </div>
       )}
 
-      {monitors.length === 0 ? (
-        <div className="border rounded-[var(--radius-lg)] p-8 text-center" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-          <p className="m-0 text-[0.9rem]" style={{ color: 'var(--color-text-muted)' }}>Keine Monitore vorhanden.</p>
+      {filtered.length === 0 ? (
+        <div className="card p-8 text-center">
+          <p className="m-0 text-[0.9rem]" style={{ color: 'var(--color-text-muted)' }}>
+            {monitors.length === 0
+              ? isAdmin ? 'Noch keine Monitore. Lege oben rechts mit „+ Monitor“ den ersten an.' : 'Keine Monitore vorhanden.'
+              : `Keine Monitore für „${search}“ gefunden.`}
+          </p>
         </div>
       ) : (
-        <div className="border rounded-[var(--radius-lg)] overflow-hidden" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-          <table className="w-full border-collapse text-[0.86rem]">
+        <div className="card overflow-x-auto">
+          <table className="table">
             <thead>
-              <tr style={{ background: 'var(--color-surface-2)' }}>
-                <th className="font-mono text-[0.7rem] uppercase tracking-wider font-medium text-left px-4 py-3 border-b whitespace-nowrap" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}>Monitor</th>
-                <th className="font-mono text-[0.7rem] uppercase tracking-wider font-medium text-left px-4 py-3 border-b whitespace-nowrap max-md:hidden" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}>Typ</th>
-                {full && <th className="font-mono text-[0.7rem] uppercase tracking-wider font-medium text-left px-4 py-3 border-b whitespace-nowrap max-md:hidden" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}>Intervall</th>}
-                <th className="font-mono text-[0.7rem] uppercase tracking-wider font-medium text-left px-4 py-3 border-b whitespace-nowrap max-md:hidden" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}>Tags</th>
-                <th className="font-mono text-[0.7rem] uppercase tracking-wider font-medium text-left px-4 py-3 border-b whitespace-nowrap text-right" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}>Status</th>
-                <th className="font-mono text-[0.7rem] uppercase tracking-wider font-medium text-center px-2 py-3 border-b whitespace-nowrap w-[50px]" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}></th>
+              <tr>
+                <th>Monitor</th>
+                <th className="max-lg:hidden">Verlauf</th>
+                {full && <th className="max-md:hidden">Intervall</th>}
+                <th className="max-md:hidden text-right" style={{ textAlign: 'right' }}>Uptime</th>
+                <th style={{ textAlign: 'right' }}>Status</th>
+                {isAdmin && <th className="w-[1%]"></th>}
               </tr>
             </thead>
             <tbody>
-              {monitors.map((m, i) => (
-                <Row key={m.id} monitor={m} index={i} full={full} onDelete={handleDelete} />
+              {filtered.map((m) => (
+                <Row key={m.id} monitor={m} beats={beats[m.id] ?? []} full={full} isAdmin={isAdmin} onDelete={handleDelete} onToggle={handleToggle} />
               ))}
             </tbody>
           </table>
@@ -70,70 +90,62 @@ export default function NodesTable({ title, subtitle, full }: NodesTableProps) {
   );
 }
 
-function Row({ monitor, index, full, onDelete }: { monitor: Monitor; index: number; full?: boolean; onDelete: (id: string, name: string) => void }) {
-  const sparkRef = useRef<HTMLCanvasElement>(null);
+function Row({ monitor, beats, full, isAdmin, onDelete, onToggle }: {
+  monitor: Monitor; beats: Beat[]; full?: boolean; isAdmin: boolean;
+  onDelete: (m: Monitor) => void; onToggle: (m: Monitor) => void;
+}) {
   const setDetailMonitor = useStore((s) => s.setDetailMonitor);
   const setEditMonitor = useStore((s) => s.setEditMonitor);
 
-  useEffect(() => {
-    const canvas = sparkRef.current;
-    if (!canvas) return;
-    const st = monitor.status === 'UP' ? 'ok' : monitor.status === 'DOWN' ? 'down' : 'warn';
-    drawRowSpark(canvas, index + 2, st as 'ok' | 'warn' | 'down');
-  }, [monitor.status, index]);
-
-  const intervalMins = Math.round(monitor.intervalSeconds / 60);
-  const typ = { http: 'HTTP', tcp: 'TCP', ping: 'Ping', dns: 'DNS', ssl: 'SSL', push: 'Push' }[monitor.type] || monitor.type;
+  const counted = beats.filter((b) => b.status !== 'PENDING');
+  const uptime = counted.length ? Math.round((counted.filter((b) => b.status !== 'DOWN').length / counted.length) * 1000) / 10 : undefined;
+  const last = beats[beats.length - 1];
+  const target = monitorTarget(monitor.type, monitorsApi.monitorConfig(monitor));
 
   return (
     <tr className="transition-colors duration-100 cursor-pointer hover:bg-[var(--color-surface-2)]" onClick={() => setDetailMonitor(monitor.id)}>
-      <td className="px-4 py-[13px] border-b" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-        <span className="flex items-center gap-[10px]" style={{ color: 'var(--color-text)' }}>
-          <span className={`w-[9px] h-[9px] rounded-full flex-none inline-block ${
-            monitor.status === 'UP' ? 'bg-[var(--color-ok)]' :
-            monitor.status === 'DOWN' ? 'bg-[var(--color-down)]' :
-            monitor.status === 'DEGRADED' ? 'bg-[var(--color-warn)]' :
-            'bg-[var(--color-text-dim)]'
-          }`} />
-          <span className="font-mono text-[0.84rem] font-medium">{monitor.name}</span>
-        </span>
-      </td>
-      <td className="px-4 py-[13px] border-b max-md:hidden font-mono text-[0.8rem]" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>{typ}</td>
-      {full && (
-        <td className="px-4 py-[13px] border-b max-md:hidden font-mono text-[0.8rem]" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-          {intervalMins > 0 ? `${intervalMins} min` : `${monitor.intervalSeconds} s`}
-        </td>
-      )}
-      <td className="px-4 py-[13px] border-b max-md:hidden" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-        <div className="flex gap-1 flex-wrap">
-          {monitor.tags.length > 0 ? monitor.tags.map((t) => (
-            <span key={t} className="font-mono text-[0.7rem] px-[6px] py-[2px] rounded-[4px]" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-dim)' }}>{t}</span>
-          )) : (
-            <span className="text-[0.75rem]" style={{ color: 'var(--color-text-dim)' }}>—</span>
-          )}
+      <td>
+        <div className="flex items-center gap-[10px] min-w-0">
+          <span className="w-[9px] h-[9px] rounded-full flex-none inline-block" style={{ background: statusColor(monitor.status) }} />
+          <div className="min-w-0">
+            <div className="font-medium truncate max-w-[280px]" style={{ color: 'var(--color-text)' }}>{monitor.name}</div>
+            <div className="font-mono text-[0.72rem] truncate max-w-[280px]" style={{ color: 'var(--color-text-dim)' }}>
+              {TYPE_LABELS[monitor.type] ?? monitor.type}{target ? ` · ${target}` : ''}
+              {last?.latencyMs != null ? ` · ${last.latencyMs} ms` : ''}
+            </div>
+            {monitor.tags.length > 0 && (
+              <div className="flex gap-1 flex-wrap mt-1">
+                {monitor.tags.map((t) => (
+                  <span key={t} className="font-mono text-[0.66rem] px-[6px] py-[1px] rounded-[4px]" style={{ background: 'var(--color-surface-2)', color: 'var(--color-text-dim)' }}>{t}</span>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </td>
-      <td className="px-4 py-[13px] border-b text-right" style={{ borderColor: 'var(--color-border)' }} dangerouslySetInnerHTML={{ __html: statusBadge(monitor.status) }} />
-      <td className="px-2 py-[13px] border-b text-center" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="flex gap-1">
-            <button
-              onClick={(e) => { e.stopPropagation(); setEditMonitor(monitor.id); }}
-              className="w-[30px] h-[30px] rounded-[6px] grid place-items-center border cursor-pointer hover:bg-[var(--color-surface-2)]"
-              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-dim)', background: 'transparent' }}
-              title="Bearbeiten"
-            >
+      <td className="max-lg:hidden">
+        <BeatBar beats={beats} slots={30} />
+      </td>
+      {full && <td className="max-md:hidden font-mono text-[0.8rem]">{formatInterval(monitor.intervalSeconds)}</td>}
+      <td className="max-md:hidden font-mono text-[0.8rem] tabular-nums" style={{ textAlign: 'right', color: uptimeColor(uptime) }}>
+        {uptime !== undefined ? `${uptime}%` : '—'}
+      </td>
+      <td style={{ textAlign: 'right' }}><StatusPill status={monitor.status} /></td>
+      {isAdmin && (
+        <td>
+          <div className="flex gap-1 justify-end">
+            <button onClick={(e) => { e.stopPropagation(); onToggle(monitor); }} className="btn btn-icon" style={{ width: 30, height: 30 }} title={monitor.status === 'PAUSED' ? 'Fortsetzen' : 'Pausieren'}>
+              {monitor.status === 'PAUSED' ? <Play className="w-[13px] h-[13px]" /> : <Pause className="w-[13px] h-[13px]" />}
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setEditMonitor(monitor.id); }} className="btn btn-icon" style={{ width: 30, height: 30 }} title="Bearbeiten">
               <Edit3 className="w-[13px] h-[13px]" />
             </button>
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(monitor.id, monitor.name); }}
-              className="w-[30px] h-[30px] rounded-[6px] grid place-items-center border cursor-pointer hover:bg-[var(--color-down-soft)]"
-              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-dim)', background: 'transparent' }}
-              title="Löschen"
-            >
+            <button onClick={(e) => { e.stopPropagation(); onDelete(monitor); }} className="btn btn-icon btn-danger" style={{ width: 30, height: 30 }} title="Löschen">
               <Trash2 className="w-[13px] h-[13px]" />
             </button>
           </div>
-      </td>
+        </td>
+      )}
     </tr>
   );
 }

@@ -12,6 +12,10 @@ export class TcpChecker implements IChecker {
     const timeoutMs = cfg.timeoutMs ?? 10000;
 
     return new Promise((resolve) => {
+      if (!cfg.host || !cfg.port) {
+        resolve({ status: 'DOWN', latencyMs: null, message: 'Host and port are required', statusCode: null });
+        return;
+      }
       const socket = connect(cfg.port, cfg.host, () => {
         const latencyMs = Math.round(performance.now() - start);
         socket.destroy();

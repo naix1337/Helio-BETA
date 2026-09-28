@@ -1,63 +1,63 @@
 # ============================================================
-# Helio — Production Multi-stage Docker Build
+# Helio — Multi-stage Docker Build
 # ============================================================
 
-# Stage 1: Install production dependencies
-FROM node:22-alpine AS deps
+# ---------- Stage 1: build client + server ----------
+FROM node:22-alpine AS build
 WORKDIR /app
 
-RUN apk add --no-cache libc6-compat
+# Toolchain in case better-sqlite3 has no prebuilt binary for this platform
+RUN apk add --no-cache python3 make g++
 
 COPY package.json package-lock.json ./
 COPY shared/package.json ./shared/
 COPY server/package.json ./server/
-
-RUN npm ci --only=production && \
-    npm cache clean --force
-
-# Stage 2: Build client frontend
-FROM node:22-alpine AS builder
-WORKDIR /app
-
-COPY package.json package-lock.json ./
 COPY client/package.json ./client/
-RUN npm ci
+RUN npm ci --no-audit --no-fund
 
-COPY client/ ./client/
 COPY shared/ ./shared/
-RUN npm run build -w client
+COPY server/ ./server/
+COPY client/ ./client/
 
-# Stage 3: Production runner
+# Build, then reinstall only the server's production dependencies
+# (`npm prune` does not remove workspace devDependencies)
+RUN npm run build -w client \
+ && npm run build -w server \
+ && rm -rf node_modules server/node_modules client/node_modules shared/node_modules \
+ && npm ci --omit=dev -w server --no-audit --no-fund \
+ && rm -rf server/src client/src
+
+# ---------- Stage 2: runtime ----------
 FROM node:22-alpine AS runner
 WORKDIR /app
 
-RUN apk add --no-cache dumb-init iputils
+# iputils: real ICMP ping (unprivileged via net.ipv4.ping_group_range)
+RUN apk add --no-cache dumb-init iputils tzdata wget
 
-# Create non-root user
-RUN addgroup -g 1001 -S helio && \
-    adduser -S -u 1001 -G helio helio
+ARG UID=1001
+ARG GID=1001
+RUN addgroup -g ${GID} -S helio && adduser -S -u ${UID} -G helio helio
 
-# Copy deps
-COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/shared ./shared
-COPY --from=deps /app/server ./server
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/shared ./shared
+COPY --from=build /app/server ./server
+COPY --from=build /app/client/dist ./client/dist
 
-# Copy source (compiled at runtime via tsx)
-COPY server/src/ ./server/src/
-COPY shared/src/ ./shared/src/
-
-# Copy built frontend
-COPY --from=builder /app/client/dist ./client/dist
-
-# Create data directory with correct ownership
 RUN mkdir -p /app/data && chown -R helio:helio /app/data
 
-ENV NODE_ENV=production
+ENV NODE_ENV=production \
+    PORT=3001 \
+    HOST=0.0.0.0 \
+    DB_PATH=/app/data/helio.db \
+    BACKUP_DIR=/app/data/backups
+
 EXPOSE 3001
-
 VOLUME ["/app/data"]
-
 USER helio
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:3001/api/v1/live || exit 1
+
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["npx", "--prefix", "/app/server", "tsx", "src/index.ts"]
+CMD ["node", "server/dist/index.js"]

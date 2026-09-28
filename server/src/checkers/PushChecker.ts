@@ -34,15 +34,21 @@ registerChecker(new PushChecker());
    ============================================================ */
 
 /**
- * Record a push hit for the given token.
- * Persists the current timestamp in SQLite.
+ * Record a push hit for the given token (ISO timestamp).
  */
 export function recordPushHit(token: string): void {
+  const now = new Date().toISOString();
   getDb().prepare(`
     INSERT INTO push_tracking (token, last_push_at, created_at)
-    VALUES (?, datetime('now'), datetime('now'))
-    ON CONFLICT(token) DO UPDATE SET last_push_at = datetime('now')
-  `).run(token);
+    VALUES (?, ?, ?)
+    ON CONFLICT(token) DO UPDATE SET last_push_at = excluded.last_push_at
+  `).run(token, now, now);
+}
+
+/** Parse both ISO timestamps and legacy SQLite `YYYY-MM-DD HH:MM:SS` (UTC) values */
+function parseDbTime(value: string): number {
+  const iso = value.includes('T') ? value : value.replace(' ', 'T') + 'Z';
+  return new Date(iso).getTime();
 }
 
 /**
@@ -51,36 +57,21 @@ export function recordPushHit(token: string): void {
  */
 export function getLastPushTime(token: string): number | undefined {
   const row = getDb().prepare(
-    'SELECT last_push_at FROM push_tracking WHERE token = ?'
+    'SELECT last_push_at FROM push_tracking WHERE token = ?',
   ).get(token) as { last_push_at: string } | undefined;
 
   if (!row) return undefined;
-  return new Date(row.last_push_at + 'Z').getTime();
-}
-
-/**
- * Check whether a push token's grace period has expired.
- * A token is considered expired if no push has been received within
- * (intervalSeconds + graceSeconds) of the current time.
- */
-export function isPushExpired(
-  token: string,
-  intervalSeconds: number,
-  graceSeconds: number,
-): boolean {
-  const last = getLastPushTime(token);
-  if (last === undefined) return true;
-  const elapsed = (Date.now() - last) / 1000;
-  return elapsed > intervalSeconds + graceSeconds;
+  const t = parseDbTime(row.last_push_at);
+  return Number.isNaN(t) ? undefined : t;
 }
 
 /**
  * Delete push tracking entries older than the given retention period.
- * Called during aggregation.
  */
 export function prunePushTracking(retentionDays: number = 30): number {
+  const cutoff = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
   const result = getDb().prepare(
-    "DELETE FROM push_tracking WHERE last_push_at < datetime('now', ? || ' days')"
-  ).run(`-${retentionDays}`);
+    'DELETE FROM push_tracking WHERE last_push_at < ?',
+  ).run(cutoff);
   return result.changes;
 }

@@ -1,99 +1,84 @@
 import { useEffect, useState } from 'react';
-import { useStore } from '../store/useStore';
+import { useStore, type UptimeSummary } from '../store/useStore';
 import { getUptime } from '../api/monitors';
 import { Activity, TrendingUp, BarChart3, Zap } from 'lucide-react';
+import { statusColor } from '../utils/format';
+import { formatInterval, uptimeColor } from '../utils/format';
 
 export default function MetricsView() {
   const monitors = useStore((s) => s.monitors);
-  const fetchMonitors = useStore((s) => s.fetchMonitors);
-  const [uptimes, setUptimes] = useState<Record<string, { last24h: number; last7d: number; last30d: number }>>({});
+  const setDetailMonitor = useStore((s) => s.setDetailMonitor);
+  const [uptimes, setUptimes] = useState<Record<string, UptimeSummary>>({});
+  const idKey = monitors.map((m) => m.id).join(',');
 
   useEffect(() => {
-    fetchMonitors();
-  }, []);
+    let cancelled = false;
+    const ids = idKey ? idKey.split(',') : [];
+    Promise.all(ids.map(async (id) => [id, await getUptime(id).catch(() => null)] as const)).then((entries) => {
+      if (cancelled) return;
+      const out: Record<string, UptimeSummary> = {};
+      for (const [id, u] of entries) if (u) out[id] = u;
+      setUptimes(out);
+    });
+    return () => { cancelled = true; };
+  }, [idKey]);
 
-  useEffect(() => {
-    const load = async () => {
-      const results: Record<string, any> = {};
-      for (const m of monitors) {
-        try {
-          const u = await getUptime(m.id);
-          if (u) results[m.id] = u;
-        } catch {}
-      }
-      setUptimes(results);
-    };
-    if (monitors.length > 0) load();
-  }, [monitors.length]);
+  const values = Object.values(uptimes);
+  const avg = (k: keyof UptimeSummary) => values.length ? Math.round((values.reduce((s, u) => s + u[k], 0) / values.length) * 100) / 100 : undefined;
+  const avgInterval = monitors.length ? Math.round(monitors.reduce((s, m) => s + m.intervalSeconds, 0) / monitors.length) : 0;
 
-  const totalChecks = monitors.length * 100; // Approx
-  const avgUptime = monitors.length > 0
-    ? Math.round(monitors.reduce((sum, m) => {
-        const u = uptimes[m.id];
-        return sum + (u?.last24h ?? 0);
-      }, 0) / monitors.length * 100) / 100
-    : 0;
+  const kpis = [
+    { icon: <Activity className="w-[16px] h-[16px]" />, label: 'Monitore', value: String(monitors.length) },
+    { icon: <Zap className="w-[16px] h-[16px]" />, label: 'Ø Uptime 24h', value: avg('last24h') !== undefined ? `${avg('last24h')}%` : '—', color: uptimeColor(avg('last24h')) },
+    { icon: <BarChart3 className="w-[16px] h-[16px]" />, label: 'Ø Uptime 30 Tage', value: avg('last30d') !== undefined ? `${avg('last30d')}%` : '—', color: uptimeColor(avg('last30d')) },
+    { icon: <TrendingUp className="w-[16px] h-[16px]" />, label: 'Ø Prüfintervall', value: monitors.length ? formatInterval(avgInterval) : '—' },
+  ];
+
+  const cell = (v: number | undefined) => (
+    <td className="font-mono tabular-nums" style={{ textAlign: 'right', color: uptimeColor(v) }}>{v !== undefined ? `${v}%` : '—'}</td>
+  );
 
   return (
     <div className="animate-[view-fade_0.35s_cubic-bezier(0.22,1,0.36,1)]">
-      {/* KPI row */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 mb-5">
-        {[
-          { icon: <Activity className="w-[16px] h-[16px]" />, label: 'Monitore', value: monitors.length },
-          { icon: <Zap className="w-[16px] h-[16px]" />, label: 'Ø Uptime (24h)', value: avgUptime >= 99 ? `${avgUptime}%` : `${avgUptime}%`, color: avgUptime >= 99 ? 'var(--color-ok)' : 'var(--color-warn)' },
-          { icon: <BarChart3 className="w-[16px] h-[16px]" />, label: 'Datenpunkte', value: `${totalChecks}+` },
-          { icon: <TrendingUp className="w-[16px] h-[16px]" />, label: 'Prüfintervalle', value: '~60s' },
-        ].map((k, i) => (
-          <div key={i} className="border rounded-[var(--radius-lg)] p-[16px]" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
+        {kpis.map((k) => (
+          <div key={k.label} className="card p-[16px]">
             <div className="flex items-center gap-[8px] text-[0.8rem]" style={{ color: 'var(--color-text-muted)' }}>
-              <span className="w-[26px] h-[26px] rounded-[7px] grid place-items-center" style={{ background: 'var(--color-primary-soft)', color: 'var(--color-primary)' }}>
-                {k.icon}
-              </span>
+              <span className="w-[26px] h-[26px] rounded-[7px] grid place-items-center" style={{ background: 'var(--color-primary-soft)', color: 'var(--color-primary)' }}>{k.icon}</span>
               {k.label}
             </div>
-            <div className="font-mono text-[1.5rem] font-[650] tracking-tight mt-[10px] leading-none" style={{ color: 'var(--color-text)' }}>
-              {k.value}
-            </div>
+            <div className="font-mono text-[1.5rem] font-[650] tracking-tight mt-[10px] leading-none" style={{ color: k.color ?? 'var(--color-text)' }}>{k.value}</div>
           </div>
         ))}
       </div>
 
-      {/* Monitor uptime table */}
-      <div className="border rounded-[var(--radius-lg)] overflow-hidden" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-        <div className="px-[18px] py-[14px] border-b font-medium text-[0.95rem]" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}>
-          Uptime-Übersicht
-        </div>
-        <table className="w-full text-[0.84rem] border-collapse">
+      <div className="card overflow-x-auto">
+        <div className="card-header font-medium text-[0.95rem]" style={{ color: 'var(--color-text)' }}>Uptime-Übersicht</div>
+        <table className="table">
           <thead>
-            <tr style={{ background: 'var(--color-surface-2)' }}>
-              <th className="font-mono text-[0.68rem] uppercase tracking-wider font-medium text-left px-4 py-[10px] border-b" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}>Monitor</th>
-              <th className="font-mono text-[0.68rem] uppercase tracking-wider font-medium text-right px-4 py-[10px] border-b" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}>24h</th>
-              <th className="font-mono text-[0.68rem] uppercase tracking-wider font-medium text-right px-4 py-[10px] border-b" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}>7 Tage</th>
-              <th className="font-mono text-[0.68rem] uppercase tracking-wider font-medium text-right px-4 py-[10px] border-b" style={{ color: 'var(--color-text-dim)', borderColor: 'var(--color-border)' }}>30 Tage</th>
+            <tr>
+              <th>Monitor</th>
+              <th style={{ textAlign: 'right' }}>24h</th>
+              <th style={{ textAlign: 'right' }}>7 Tage</th>
+              <th style={{ textAlign: 'right' }}>30 Tage</th>
+              <th style={{ textAlign: 'right' }} className="max-md:hidden">1 Jahr</th>
             </tr>
           </thead>
           <tbody>
             {monitors.map((m) => {
               const u = uptimes[m.id];
               return (
-                <tr key={m.id} className="border-b last:border-b-0" style={{ borderColor: 'var(--color-border)' }}>
-                  <td className="px-4 py-[11px] font-medium" style={{ color: 'var(--color-text)' }}>
+                <tr key={m.id} className="cursor-pointer hover:bg-[var(--color-surface-2)]" onClick={() => setDetailMonitor(m.id)}>
+                  <td style={{ color: 'var(--color-text)' }}>
                     <span className="flex items-center gap-[8px]">
-                      <span className={`w-[8px] h-[8px] rounded-full ${
-                        m.status === 'UP' ? 'bg-[var(--color-ok)]' : m.status === 'DOWN' ? 'bg-[var(--color-down)]' : 'bg-[var(--color-warn)]'
-                      }`} />
+                      <span className="w-[8px] h-[8px] rounded-full" style={{ background: statusColor(m.status) }} />
                       {m.name}
                     </span>
                   </td>
-                  <td className="px-4 py-[11px] text-right font-mono tabular-nums" style={{
-                    color: u && u.last24h >= 99.9 ? 'var(--color-ok)' : u && u.last24h >= 95 ? 'var(--color-warn)' : 'var(--color-down)',
-                  }}>{u ? `${u.last24h}%` : '—'}</td>
-                  <td className="px-4 py-[11px] text-right font-mono tabular-nums" style={{
-                    color: u && u.last7d >= 99.9 ? 'var(--color-ok)' : u && u.last7d >= 95 ? 'var(--color-warn)' : 'var(--color-down)',
-                  }}>{u ? `${u.last7d}%` : '—'}</td>
-                  <td className="px-4 py-[11px] text-right font-mono tabular-nums" style={{
-                    color: u && u.last30d >= 99.9 ? 'var(--color-ok)' : u && u.last30d >= 95 ? 'var(--color-warn)' : 'var(--color-down)',
-                  }}>{u ? `${u.last30d}%` : '—'}</td>
+                  {cell(u?.last24h)}
+                  {cell(u?.last7d)}
+                  {cell(u?.last30d)}
+                  <td className="font-mono tabular-nums max-md:hidden" style={{ textAlign: 'right', color: uptimeColor(u?.last365d) }}>{u ? `${u.last365d}%` : '—'}</td>
                 </tr>
               );
             })}

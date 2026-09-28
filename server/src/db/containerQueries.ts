@@ -1,4 +1,4 @@
-import { v4 as uuid } from 'uuid';
+import { randomUUID as uuid } from 'node:crypto';
 import { getDb } from './connection.js';
 import type { ProxmoxContainer } from '../collectors/proxmox.js';
 import { encrypt, decrypt, isEncrypted } from '../utils/encryption.js';
@@ -91,8 +91,9 @@ export function saveContainerMetrics(containers: ProxmoxContainer[], pingResults
   const db = getDb();
   const insert = db.prepare(`
     INSERT INTO container_metrics (id, vmid, name, node, type, status, cpu, mem, maxmem, disk, maxdisk, uptime, ping_ms, netin, netout, timestamp)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
+  const now = new Date().toISOString();
 
   const tx = db.transaction(() => {
     for (const c of containers) {
@@ -100,7 +101,7 @@ export function saveContainerMetrics(containers: ProxmoxContainer[], pingResults
       insert.run(
         uuid(), c.vmid, c.name, c.node, c.type, c.status,
         c.cpu, c.mem, c.maxmem, c.disk, c.maxdisk,
-        c.uptime ?? null, ping, c.netout ?? null, c.netin ?? null,
+        c.uptime ?? null, ping, c.netin ?? null, c.netout ?? null, now,
       );
     }
   });
@@ -113,13 +114,11 @@ export function saveContainerMetrics(containers: ProxmoxContainer[], pingResults
  */
 export function getLatestContainerMetrics(): ContainerMetricSnapshot[] {
   const rows = getDb().prepare(`
-    SELECT cm.* FROM container_metrics cm
-    INNER JOIN (
-      SELECT vmid, MAX(timestamp) as max_ts
-      FROM container_metrics
-      GROUP BY vmid
-    ) latest ON cm.vmid = latest.vmid AND cm.timestamp = latest.max_ts
-    ORDER BY cm.name
+    SELECT * FROM (
+      SELECT cm.*, ROW_NUMBER() OVER (PARTITION BY vmid ORDER BY timestamp DESC) AS rn
+      FROM container_metrics cm
+    ) WHERE rn = 1
+    ORDER BY name COLLATE NOCASE
   `).all() as Record<string, unknown>[];
   return rows.map(rowToMetric);
 }
@@ -140,9 +139,14 @@ export function getContainerMetricByVmid(vmid: number): ContainerMetricSnapshot 
 
 export function pruneContainerMetrics(retentionDays: number = 7): number {
   const result = getDb().prepare(
-    "DELETE FROM container_metrics WHERE timestamp < datetime('now', ? || ' days')"
-  ).run(`-${retentionDays}`);
+    'DELETE FROM container_metrics WHERE timestamp < ?',
+  ).run(new Date(Date.now() - retentionDays * 86400000).toISOString());
   return result.changes;
+}
+
+/** Legacy rows use SQLite `YYYY-MM-DD HH:MM:SS` (UTC) */
+function toIso(ts: string): string {
+  return ts.includes('T') ? ts : ts.replace(' ', 'T') + 'Z';
 }
 
 function rowToMetric(row: Record<string, unknown>): ContainerMetricSnapshot {
@@ -160,7 +164,7 @@ function rowToMetric(row: Record<string, unknown>): ContainerMetricSnapshot {
     maxdisk: row['maxdisk'] as number,
     uptime: row['uptime'] as number | null,
     pingMs: row['ping_ms'] as number | null,
-    timestamp: row['timestamp'] as string,
+    timestamp: toIso(row['timestamp'] as string),
     netin: row['netin'] as number | null,
     netout: row['netout'] as number | null,
   };

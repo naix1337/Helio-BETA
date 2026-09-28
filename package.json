@@ -1,6 +1,6 @@
 {
   "name": "helio",
-  "version": "1.0.0",
+  "version": "2.2.0",
   "private": true,
   "workspaces": [
     "shared",
@@ -10,8 +10,16 @@
   "scripts": {
     "dev:server": "npm run dev -w server",
     "dev:client": "npm run dev -w client",
+    "build": "npm run build -w client && npm run build -w server",
     "build:server": "npm run build -w server",
     "build:client": "npm run build -w client",
+    "start": "npm run start -w server",
+    "test": "npm test -w server",
+    "lint": "npm run lint -w client",
+    "typecheck": "npm run typecheck -w server && npm run typecheck -w client",
     "seed": "npm run seed -w server"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

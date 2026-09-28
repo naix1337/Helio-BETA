@@ -9,12 +9,23 @@
  */
 
 import pino from 'pino';
+import { createRequire } from 'node:module';
 
 const isProd = process.env['NODE_ENV'] === 'production';
 
+/** pino-pretty is a dev dependency — only use it when it is installed */
+function hasPretty(): boolean {
+  try {
+    createRequire(import.meta.url).resolve('pino-pretty');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const logger = pino({
   level: process.env['LOG_LEVEL'] || (isProd ? 'info' : 'debug'),
-  ...(isProd
+  ...(isProd || !hasPretty()
     ? {}
     : {
         transport: {

@@ -1,15 +1,11 @@
-import { useEffect } from 'react';
 import { useStore } from '../store/useStore';
 import { ArrowRight } from 'lucide-react';
 
 export default function AlertFeed() {
   const monitors = useStore((s) => s.monitors);
-  const fetchMonitors = useStore((s) => s.fetchMonitors);
+  const beats = useStore((s) => s.beats);
   const setView = useStore((s) => s.setView);
-
-  useEffect(() => {
-    if (monitors.length === 0) fetchMonitors();
-  }, [monitors.length, fetchMonitors]);
+  const setDetailMonitor = useStore((s) => s.setDetailMonitor);
 
   const downMonitors = monitors.filter((m) => m.status === 'DOWN' || m.status === 'DEGRADED');
   const criticalCount = monitors.filter((m) => m.status === 'DOWN').length;
@@ -40,7 +36,7 @@ export default function AlertFeed() {
           downMonitors.slice(0, 5).map((m) => {
             const isDown = m.status === 'DOWN';
             return (
-              <div key={m.id} className="flex gap-3 px-[16px] py-[13px] border-b last:border-b-0" style={{ borderColor: 'var(--color-border)' }}>
+              <div key={m.id} onClick={() => setDetailMonitor(m.id)} className="flex gap-3 px-[16px] py-[13px] border-b last:border-b-0 cursor-pointer hover:bg-[var(--color-surface-2)]" style={{ borderColor: 'var(--color-border)' }}>
                 <span className="w-[30px] h-[30px] rounded-[8px] flex-none grid place-items-center" style={{
                   background: isDown ? 'var(--color-down-soft)' : 'var(--color-warn-soft)',
                   color: isDown ? 'var(--color-down)' : 'var(--color-warn)',
@@ -49,8 +45,8 @@ export default function AlertFeed() {
                 </span>
                 <div className="flex-1 min-w-0">
                   <div className="text-[0.86rem] font-medium" style={{ color: 'var(--color-text)' }}>{m.name}</div>
-                  <div className="font-mono text-[0.77rem] mt-[2px]" style={{ color: 'var(--color-text-dim)' }}>
-                    {m.type} · {isDown ? 'Nicht erreichbar' : 'Gedrosselt'}
+                  <div className="font-mono text-[0.77rem] mt-[2px] truncate" style={{ color: 'var(--color-text-dim)' }}>
+                    {(beats[m.id]?.[beats[m.id]!.length - 1]?.message) || (isDown ? 'Nicht erreichbar' : 'Eingeschränkt')}
                   </div>
                 </div>
                 <span className="font-mono text-[0.72rem]" style={{ color: 'var(--color-text-dim)' }}>{m.status}</span>
